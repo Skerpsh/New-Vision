@@ -10,7 +10,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection.Editor
     [CustomEditor(typeof(SentisInferenceRunManager))]
     public class SentisModelEditorConverter : UnityEditor.Editor
     {
-        private const string FILEPATH = "Assets/PassthroughCameraApiSamples/MultiObjectDetection/SentisInference/Model/yolov9sentis.sentis";
         private SentisInferenceRunManager m_targetClass;
         private float m_iouThreshold;
         private float m_scoreThreshold;
@@ -26,7 +25,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection.Editor
         {
             _ = DrawDefaultInspector();
 
-            if (GUILayout.Button("Generate Yolov9 Sentis model with Non-Max-Supression layer"))
+            if (GUILayout.Button("Generate Sentis model from Onnx Model (and use it)"))
             {
                 OnEnable(); // Get the latest values from the serialized object
                 ConvertModel(); // convert the ONNX model to sentis
@@ -59,12 +58,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection.Editor
             var corners = Functional.MatMul(boxCoords, centersToCorners);                    //shape=(N,4)
             var modelFinal = graph.Compile(corners, classIDs, scores);
 
-            //Export the model to Sentis format
+            //Export the model to Sentis format next to the ONNX file, e.g. yolo11n_320.onnx -> yolo11n_320.sentis
+            var onnxPath = AssetDatabase.GetAssetPath(m_targetClass.OnnxModel);
+            var sentisPath = System.IO.Path.ChangeExtension(onnxPath, ".sentis");
             ModelQuantizer.QuantizeWeights(QuantizationType.Uint8, ref modelFinal);
-            ModelWriter.Save(FILEPATH, modelFinal);
+            ModelWriter.Save(sentisPath, modelFinal);
 
-            // refresh assets
+            // refresh assets and use the generated model
             AssetDatabase.Refresh();
+            serializedObject.Update();
+            serializedObject.FindProperty("m_sentisModel").objectReferenceValue = AssetDatabase.LoadAssetAtPath<ModelAsset>(sentisPath);
+            _ = serializedObject.ApplyModifiedProperties();
+            Debug.Log($"[NewVision] Sentis model saved to {sentisPath} and assigned");
         }
     }
 }

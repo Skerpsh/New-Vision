@@ -55,27 +55,18 @@ MonoBehaviour:
   m_GameObject: {fileID: 3912902613357370026}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Script: {fileID: 11500000, guid: 4b7e2a9c1d3f4e8a9b6c5d4e3f2a1b0c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
-  m_Color: {r: 0.36078432, g: 0.99215686, b: 0.60784316, a: 0.60784316}
-  m_RaycastTarget: 1
+  m_Color: {r: 0.36078432, g: 0.99215686, b: 0.60784316, a: 1}
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10911, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
-  m_PreserveAspect: 0
-  m_FillCenter: 0
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 6
+  m_thickness: 0.005
 --- !u!1 &5228241647023865434
 GameObject:
   m_ObjectHideFlags: 0
@@ -125,13 +116,13 @@ MonoBehaviour:
   m_cameraAccess: {fileID: 0}
   m_uiMenuManager: {fileID: 0}
   m_detectionManager: {fileID: 0}
-  m_backend: 512
-  m_sentisModel: {fileID: 5022602860645237092, guid: 69ab50aef18ae412cac4b305492d527c, type: 3}
+  m_backend: 256
+  m_sentisModel: {fileID: 5022602860645237092, guid: 7411b80d120b920459e1145bdcec62e3, type: 3}
   m_labelsAsset: {fileID: 4900000, guid: c01c64149c7930b45a76559caabd5c78, type: 3}
   m_iouThreshold: 0.4
   m_scoreThreshold: 0.3
   m_uiInference: {fileID: 2184060436030677583}
-  OnnxModel: {fileID: 5022602860645237092, guid: e61826a46beb24bb380fd628c56eacaa, type: 3}
+  OnnxModel: {fileID: 5022602860645237092, guid: 7e7a77a70a7f1744e897dc0492f08ae5, type: 3}
 --- !u!114 &2184060436030677583
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -144,7 +135,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad237abe1df8fba4da80d86f3cb45a6b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_detectionManager: {fileID: 0}
   m_environmentRaycast: {fileID: 0}
   m_cameraAccess: {fileID: 0}
   m_detectionBoxPrefab: {fileID: 5646078222565903388}

@@ -19,3 +19,6 @@ PerformanceTestRun*.*
 StreamingAssets*
 buildInfo.txt
 Packages/packages-lock.json
+
+# IDE solution files (Unity 6)
+*.slnx

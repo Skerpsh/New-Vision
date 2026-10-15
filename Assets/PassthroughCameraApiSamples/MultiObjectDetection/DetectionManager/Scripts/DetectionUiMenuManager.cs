@@ -43,7 +43,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 yield return null;
             }
-            OnInitialMenu();
+            // Start detecting right away, without the "press A to start" panel
+            OnPauseMenu(false);
         }
 
         private void Update()
@@ -101,7 +102,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         #region Ui state: detection information
         private void UpdateLabelInformation()
         {
-            m_labelInformation.text = $"Unity Sentis version: 2.1.3\nAI model: Yolo\nDetecting objects: {m_objectsDetected}\nObjects identified: {m_objectsIdentified}";
+            m_labelInformation.text = $"New Vision\nObjects in view: {m_objectsDetected}\nMarkers placed: {m_objectsIdentified}";
         }
 
         public void OnObjectsDetected(int objects)

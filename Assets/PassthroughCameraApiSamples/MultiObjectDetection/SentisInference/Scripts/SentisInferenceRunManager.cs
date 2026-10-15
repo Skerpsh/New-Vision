@@ -34,7 +34,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private Worker m_engine;
         private Vector2Int m_inputSize;
-        private readonly List<(int classId, Vector4 boundingBox)> m_detections = new List<(int classId, Vector4 boundingBox)>();
+        private readonly List<(int classId, Vector4 boundingBox, float score)> m_detections = new List<(int classId, Vector4 boundingBox, float score)>();
 
         private void Awake()
         {
@@ -105,6 +105,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
 
             var cachedCameraPose = m_cameraAccess.GetCameraPose();
+            var inferenceStartTime = Time.realtimeSinceStartup;
 
             // Update Capture data
             Texture targetTexture = m_cameraAccess.GetTexture();
@@ -117,36 +118,29 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Schedule all model layers
             m_engine.Schedule(input);
 
-            // Get the results. ReadbackAndCloneAsync waits for all layers to complete before returning the result
+            // Get the results. ReadbackAndCloneAsync waits for all layers to complete before returning the result.
+            // All three readbacks are requested at once, so we wait for them together instead of one frame after another.
             var boxesAwaiter = (m_engine.PeekOutput(0) as Tensor<float>).ReadbackAndCloneAsync().GetAwaiter();
-            while (!boxesAwaiter.IsCompleted)
+            var classIDsAwaiter = (m_engine.PeekOutput(1) as Tensor<int>).ReadbackAndCloneAsync().GetAwaiter();
+            var scoresAwaiter = (m_engine.PeekOutput(2) as Tensor<float>).ReadbackAndCloneAsync().GetAwaiter();
+            while (!boxesAwaiter.IsCompleted || !classIDsAwaiter.IsCompleted || !scoresAwaiter.IsCompleted)
             {
                 yield return null;
             }
             using var boxes = boxesAwaiter.GetResult();
+            using var classIDs = classIDsAwaiter.GetResult();
+            using var scores = scoresAwaiter.GetResult();
             if (boxes.shape[0] == 0)
             {
                 yield break;
             }
 
-            var classIDsAwaiter = (m_engine.PeekOutput(1) as Tensor<int>).ReadbackAndCloneAsync().GetAwaiter();
-            while (!classIDsAwaiter.IsCompleted)
-            {
-                yield return null;
-            }
-            using var classIDs = classIDsAwaiter.GetResult();
             if (classIDs.shape[0] == 0)
             {
                 Debug.LogError("classIDs.shape[0] == 0");
                 yield break;
             }
 
-            var scoresAwaiter = (m_engine.PeekOutput(2) as Tensor<float>).ReadbackAndCloneAsync().GetAwaiter();
-            while (!scoresAwaiter.IsCompleted)
-            {
-                yield return null;
-            }
-            using var scores = scoresAwaiter.GetResult();
             if (scores.shape[0] == 0)
             {
                 Debug.LogError("scores.shape[0] == 0");
@@ -154,6 +148,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
 
             NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold);
+            Debug.Log($"[NewVision] inference {m_backend}: {(Time.realtimeSinceStartup - inferenceStartTime) * 1000f:F0} ms, {m_detections.Count} objects");
 
             // Checking if spatial anchor is tracked ensures bounding boxes are placed at correct world space positIons.
             if (!m_cameraAccess.IsPlaying || m_detectionManager.m_spatialAnchor == null || !m_detectionManager.m_spatialAnchor.IsTracked)
@@ -165,7 +160,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_uiInference.DrawUIBoxes(m_detections, m_inputSize, cachedCameraPose);
         }
 
-        private static void NonMaxSuppression(List<(int classId, Vector4 boundingBox)> outDetections, Tensor<float> boxes, Tensor<int> classIDs, Tensor<float> scores, float iouThreshold, float scoreThreshold)
+        private static void NonMaxSuppression(List<(int classId, Vector4 boundingBox, float score)> outDetections, Tensor<float> boxes, Tensor<int> classIDs, Tensor<float> scores, float iouThreshold, float scoreThreshold)
         {
             outDetections.Clear();
 
@@ -198,7 +193,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 int idx = filteredIndices[i];
 
                 // Add this detection to results
-                outDetections.Add((classIDs[idx], GetBox(idx)));
+                outDetections.Add((classIDs[idx], GetBox(idx), scoresArray[idx]));
 
                 // Suppress overlapping boxes regardless of class
                 for (int j = i + 1; j < filteredIndices.Count; j++)

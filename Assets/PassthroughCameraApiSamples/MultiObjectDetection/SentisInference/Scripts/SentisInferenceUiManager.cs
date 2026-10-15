@@ -17,22 +17,64 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [SerializeField] private PassthroughCameraAccess m_cameraAccess;
 
         [SerializeField] private RectTransform m_detectionBoxPrefab;
+        [Tooltip("How fast boxes glide to the latest detection. Higher = snappier, lower = smoother. 0 = no smoothing.")]
+        [SerializeField] private float m_boxSmoothingSpeed = 15f;
+        [Tooltip("Frame line thickness per meter of distance to the head, so lines look equally thin near and far.")]
+        [SerializeField] private float m_frameThicknessPerMeter = 0.004f;
+        [Tooltip("Label scale per meter of distance to the head, so text has the same apparent size near and far.")]
+        [SerializeField] private float m_labelScalePerMeter = 0.0002f;
         [Space(10)]
         public UnityEvent<int> OnObjectsDetected;
 
         internal readonly List<BoundingBoxData> m_boxDrawn = new();
         private string[] m_labels;
         private readonly List<BoundingBoxData> m_boxPool = new();
+        private Transform m_head;
 
         internal class BoundingBoxData
         {
             public string ClassName;
             public int ClassId;
             public RectTransform BoxRectTransform;
+            public SharpFrame Frame;
+            public Text Label;
             public float lastUpdateTime;
+
+            // Latest detection result; the box glides towards it in Update()
+            public Vector3 TargetPosition;
+            public Quaternion TargetRotation;
+            public Vector2 TargetSize;
+            public bool IsNew;
         }
 
-        private void Awake() => m_detectionBoxPrefab.gameObject.SetActive(false);
+        private void Awake()
+        {
+            m_detectionBoxPrefab.gameObject.SetActive(false);
+            var cameraRig = FindAnyObjectByType<OVRCameraRig>();
+            if (cameraRig != null)
+            {
+                m_head = cameraRig.centerEyeAnchor;
+            }
+            else if (Camera.main != null)
+            {
+                m_head = Camera.main.transform;
+            }
+        }
+
+        /// <summary>
+        /// Rotation that faces the head while keeping the box upright: its top and bottom edges are always horizontal
+        /// (no roll), no matter how the head is tilted.
+        /// </summary>
+        private Quaternion UprightRotationFacingHead(Vector3 boxPosition, Quaternion fallback)
+        {
+            if (m_head == null)
+            {
+                return fallback;
+            }
+            var forward = boxPosition - m_head.position;
+            // Looking straight up/down at the box: the horizontal direction is undefined, keep the current one
+            return Vector3.Cross(forward, Vector3.up).sqrMagnitude < 1e-6f ? fallback : Quaternion.LookRotation(forward, Vector3.up);
+        }
 
         private void Update()
         {
@@ -47,18 +89,47 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     m_boxDrawn.RemoveAt(i);
                 }
             }
+
+            // Move boxes smoothly towards their latest detected position and size (frame-rate independent exponential smoothing).
+            // Rotation is not interpolated: every frame the box faces the current head position and stays level with the horizon.
+            var t = m_boxSmoothingSpeed > 0f ? 1f - Mathf.Exp(-m_boxSmoothingSpeed * Time.deltaTime) : 1f;
+            foreach (var box in m_boxDrawn)
+            {
+                var rectTransform = box.BoxRectTransform;
+                var position = Vector3.Lerp(rectTransform.position, box.TargetPosition, t);
+                rectTransform.SetPositionAndRotation(position, UprightRotationFacingHead(position, rectTransform.rotation));
+                rectTransform.sizeDelta = Vector2.Lerp(rectTransform.sizeDelta, box.TargetSize, t);
+                if (m_head != null)
+                {
+                    var distance = Mathf.Max(0.3f, Vector3.Distance(m_head.position, position));
+                    var thickness = distance * m_frameThicknessPerMeter;
+                    if (box.Frame != null)
+                    {
+                        box.Frame.Thickness = thickness;
+                    }
+                    if (box.Label != null)
+                    {
+                        // Keep the label the same apparent size at any distance, sitting just above the top edge of the frame
+                        var labelRect = box.Label.rectTransform;
+                        labelRect.localScale = Vector3.one * (distance * m_labelScalePerMeter);
+                        labelRect.anchoredPosition = new Vector2(0f, thickness);
+                    }
+                }
+            }
         }
 
         public void SetLabels(TextAsset labelsAsset)
         {
             // Parse neural net labels
             m_labels = labelsAsset.text.Split('\n');
+            for (var i = 0; i < m_labels.Length; i++)
+            {
+                m_labels[i] = m_labels[i].Trim(); // drop '\r' of Windows line endings
+            }
         }
 
-        public void DrawUIBoxes(List<(int classId, Vector4 boundingBox)> detections, Vector2 inputSize, Pose cameraPose)
+        public void DrawUIBoxes(List<(int classId, Vector4 boundingBox, float score)> detections, Vector2 inputSize, Pose cameraPose)
         {
-            Vector2 currentResolution = m_cameraAccess.CurrentResolution;
-
             if (detections.Count == 0)
             {
                 OnObjectsDetected?.Invoke(0);
@@ -79,10 +150,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 // Rect rect = Rect.MinMaxRect(x1, y1, x2, y2); // todo
 
                 Vector2 normalizedCenter = rect.center / inputSize;
-                Vector2 center = currentResolution * (normalizedCenter - Vector2.one * 0.5f);
 
                 // Get the object class name
-                var classname = m_labels[detection.classId].Replace(" ", "_");
+                var classname = m_labels[detection.classId];
 
                 // Get the 3D marker world position using Depth Raycast
                 var ray = m_cameraAccess.ViewportPointToRay(new Vector2(normalizedCenter.x, 1.0f - normalizedCenter.y), cameraPose);
@@ -122,9 +192,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
                 var boxData = GetOrCreateBoundingBoxData(detection.classId, worldSpaceCenter, size);
                 var boxRectTransform = boxData.BoxRectTransform;
-                boxRectTransform.GetComponentInChildren<Text>().text = $"Id: {detection.classId} Class: {classname} Center (px): {center:0.0} Center (%): {normalizedCenter:0.0}";
-                boxRectTransform.SetPositionAndRotation(worldSpaceCenter, Quaternion.LookRotation(normal));
-                boxRectTransform.sizeDelta = size;
+                boxData.Label.text = $"{classname} {detection.score * 100f:0}%";
+                boxData.TargetPosition = worldSpaceCenter;
+                boxData.TargetRotation = Quaternion.LookRotation(normal);
+                boxData.TargetSize = size;
+                if (boxData.IsNew)
+                {
+                    // A freshly shown box appears right on the object instead of flying in
+                    boxRectTransform.SetPositionAndRotation(boxData.TargetPosition, UprightRotationFacingHead(boxData.TargetPosition, boxData.TargetRotation));
+                    boxRectTransform.sizeDelta = boxData.TargetSize;
+                    boxData.IsNew = false;
+                }
                 boxData.lastUpdateTime = Time.time;
             }
         }
@@ -184,7 +262,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Create a new box
             var newData = GetBoxFromPoolOrCreate();
             newData.ClassId = classId;
-            newData.ClassName = m_labels[classId].Replace(" ", "_");
+            newData.ClassName = m_labels[classId];
+            newData.IsNew = true;
             m_boxDrawn.Add(newData);
             return newData;
         }
@@ -201,9 +280,19 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             var boxRectTransform = Instantiate(m_detectionBoxPrefab, ContentParent);
             boxRectTransform.gameObject.SetActive(true);
+            var label = boxRectTransform.GetComponentInChildren<Text>();
+            // Label grows upwards from the top-left corner of the frame
+            label.rectTransform.pivot = Vector2.zero;
+            label.alignment = TextAnchor.LowerLeft;
+            // Dark outline keeps the green text readable on bright backgrounds
+            var outline = label.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            outline.effectDistance = new Vector2(4f, -4f);
             return new BoundingBoxData
             {
-                BoxRectTransform = boxRectTransform
+                BoxRectTransform = boxRectTransform,
+                Frame = boxRectTransform.GetComponent<SharpFrame>(),
+                Label = label
             };
         }
 
