@@ -59,8 +59,26 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private int m_stickDirection;
         private float m_nextRepeatTime;
         private readonly StringBuilder m_sb = new();
+        private string[] m_modelNames;
+        private int m_modelIndex;
+        private Action<int> m_onModelSelected;
 
-        private int RowCount => s_actions.Length + m_labels.Length;
+        // Rows: [model switch] + quick actions + one row per class
+        private int ModelRows => m_modelNames != null && m_modelNames.Length > 1 ? 1 : 0;
+        private int FirstClassRow => ModelRows + s_actions.Length;
+        private int RowCount => FirstClassRow + m_labels.Length;
+
+        /// <summary>Adds a "Model" row; pressing A on it cycles through the models and calls onSelect with the new index.</summary>
+        public void SetModelOptions(string[] modelNames, int currentIndex, Action<int> onSelect)
+        {
+            m_modelNames = modelNames;
+            m_modelIndex = currentIndex;
+            m_onModelSelected = onSelect;
+            if (IsOpen)
+            {
+                Redraw();
+            }
+        }
 
         public void Init(TextAsset labelsAsset)
         {
@@ -160,6 +178,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void ActivateRow(int row)
         {
+            if (row < ModelRows)
+            {
+                m_modelIndex = (m_modelIndex + 1) % m_modelNames.Length;
+                m_onModelSelected?.Invoke(m_modelIndex);
+                Redraw();
+                return;
+            }
+
+            row -= ModelRows;
             if (row < s_actions.Length)
             {
                 switch (s_actions[row].action)
@@ -254,13 +281,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 var selected = row == m_cursor;
                 string line;
-                if (row < s_actions.Length)
+                if (row < ModelRows)
                 {
-                    line = $"<color=#9CC8FF>» {s_actions[row].title}</color>";
+                    line = $"<color=#FFB86C>Model: {m_modelNames[m_modelIndex]}</color>";
+                }
+                else if (row < FirstClassRow)
+                {
+                    line = $"<color=#9CC8FF>» {s_actions[row - ModelRows].title}</color>";
                 }
                 else
                 {
-                    var classId = row - s_actions.Length;
+                    var classId = row - FirstClassRow;
                     line = EnabledClasses[classId]
                         ? $"<color=#5CFD9B>[x]</color> {m_labels[classId]}"
                         : $"<color=#777777>[ ]  {m_labels[classId]}</color>";

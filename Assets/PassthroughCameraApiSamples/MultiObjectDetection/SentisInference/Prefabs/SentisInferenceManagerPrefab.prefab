@@ -56,8 +56,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4b7e2a9c1d3f4e8a9b6c5d4e3f2a1b0c, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 0.36078432, g: 0.99215686, b: 0.60784316, a: 1}
   m_RaycastTarget: 0
@@ -118,11 +118,16 @@ MonoBehaviour:
   m_detectionManager: {fileID: 0}
   m_backend: 256
   m_sentisModel: {fileID: 5022602860645237092, guid: 7411b80d120b920459e1145bdcec62e3, type: 3}
+  m_modelVariants:
+  - {fileID: 5022602860645237092, guid: 7411b80d120b920459e1145bdcec62e3, type: 3}
+  - {fileID: 5022602860645237092, guid: 079c619b5d5a65b498ac2d3bf0880352, type: 3}
+  - {fileID: 5022602860645237092, guid: ce634c407dd2572499e4775e419d6023, type: 3}
+  - {fileID: 5022602860645237092, guid: 3ce3dae3a4995de4c937832b1f90f47a, type: 3}
   m_labelsAsset: {fileID: 4900000, guid: c01c64149c7930b45a76559caabd5c78, type: 3}
   m_iouThreshold: 0.4
   m_scoreThreshold: 0.3
   m_uiInference: {fileID: 2184060436030677583}
-  OnnxModel: {fileID: 5022602860645237092, guid: 7e7a77a70a7f1744e897dc0492f08ae5, type: 3}
+  OnnxModel: {fileID: 0}
 --- !u!114 &2184060436030677583
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -138,6 +143,14 @@ MonoBehaviour:
   m_environmentRaycast: {fileID: 0}
   m_cameraAccess: {fileID: 0}
   m_detectionBoxPrefab: {fileID: 5646078222565903388}
+  m_boxSmoothingSpeed: 15
+  m_frameThicknessPerMeter: 0.004
+  m_labelScalePerMeter: 0.0002
+  m_hitsToConfirm: 3
+  m_maxGapBetweenHits: 0.4
+  m_minSizeRatio: 0.3
+  m_maxSizeRatio: 3
+  m_maxEstimatedDistance: 60
   OnObjectsDetected:
     m_PersistentCalls:
       m_Calls:

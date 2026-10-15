@@ -22,3 +22,7 @@ Packages/packages-lock.json
 
 # IDE solution files (Unity 6)
 *.slnx
+
+# Python / model export (weights are downloaded by Ultralytics, keep them out of git)
+*.pt
+__pycache__/

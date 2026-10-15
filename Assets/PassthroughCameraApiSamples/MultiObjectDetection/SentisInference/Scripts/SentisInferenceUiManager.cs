@@ -30,6 +30,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [SerializeField, Min(1)] private int m_hitsToConfirm = 3;
         [Tooltip("Max seconds between two detections that still count as 'in a row'. Unconfirmed boxes also vanish after this time.")]
         [SerializeField] private float m_maxGapBetweenHits = 0.4f;
+
+        [Header("Real size check and far objects")]
+        [Tooltip("Reject a detection if its real height (from depth) is below this fraction of the typical height of its class.")]
+        [SerializeField] private float m_minSizeRatio = 0.3f;
+        [Tooltip("If the real height from depth is above this multiple of the typical height, the depth ray probably went " +
+                 "through the object; the distance is then estimated from the typical size instead.")]
+        [SerializeField] private float m_maxSizeRatio = 3f;
+        [Tooltip("Objects beyond the depth sensor's range are placed by their typical size, but never farther than this (meters).")]
+        [SerializeField] private float m_maxEstimatedDistance = 60f;
         [Space(10)]
         public UnityEvent<int> OnObjectsDetected;
 
@@ -169,11 +178,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 // Get the 3D marker world position using Depth Raycast
                 var ray = m_cameraAccess.ViewportPointToRay(new Vector2(normalizedCenter.x, 1.0f - normalizedCenter.y), cameraPose);
                 var worldPos = m_environmentRaycast.Raycast(ray);
-                if (!worldPos.HasValue)
-                {
-                    Debug.Log($"RaycastManager failed, ray:{ray}, cameraPose:{cameraPose}");
-                    continue;
-                }
                 var normRect = new Rect(
                     rect.x / inputSize.x,
                     1f - rect.yMax / inputSize.y,
@@ -181,8 +185,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     rect.height / inputSize.y
                 );
 
-                // Calculate distance and center point first
-                float distance = Vector3.Distance(cameraPose.position, worldPos.Value);
+                // Distance: from the depth sensor when it works, otherwise estimated from the object's typical size.
+                // Also rejects detections whose real size is impossible for their class.
+                if (!TryGetDistance(classname, normRect, cameraPose, worldPos, out var distance))
+                {
+                    continue;
+                }
                 var worldSpaceCenter = m_cameraAccess.ViewportPointToRay(normRect.center, cameraPose).GetPoint(distance);
                 var normal = (worldSpaceCenter - cameraPose.position).normalized;
 
@@ -292,6 +300,61 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             ApplyVisibility(newData);
             m_boxDrawn.Add(newData);
             return newData;
+        }
+
+        /// <summary>
+        /// Decides how far the detected object is. Uses the depth hit when its implied object size is plausible;
+        /// falls back to the distance at which an object of typical size would look this tall (beyond the depth sensor's range,
+        /// or when the ray went through a see-through object like a chair). Returns false for impossible detections.
+        /// </summary>
+        private bool TryGetDistance(string className, Rect normRect, Pose cameraPose, Vector3? depthHit, out float distance)
+        {
+            distance = 0f;
+            var typicalHeight = ObjectSizes.TypicalHeight(className);
+
+            // Angular height of the box, measured through its horizontal center
+            var topRay = m_cameraAccess.ViewportPointToRay(new Vector2(normRect.center.x, normRect.yMax), cameraPose);
+            var bottomRay = m_cameraAccess.ViewportPointToRay(new Vector2(normRect.center.x, normRect.yMin), cameraPose);
+            var halfAngleTan = Mathf.Tan(Vector3.Angle(topRay.direction, bottomRay.direction) * 0.5f * Mathf.Deg2Rad);
+            // A box cut by the top or bottom of the image shows only part of the object: its height says nothing
+            var cutOff = normRect.yMin < 0.02f || normRect.yMax > 0.98f;
+
+            float? estimatedDistance = null;
+            if (typicalHeight.HasValue && halfAngleTan > 1e-4f && !cutOff)
+            {
+                estimatedDistance = Mathf.Min(typicalHeight.Value / (2f * halfAngleTan), m_maxEstimatedDistance);
+            }
+
+            if (depthHit.HasValue)
+            {
+                distance = Vector3.Distance(cameraPose.position, depthHit.Value);
+                if (!typicalHeight.HasValue || cutOff)
+                {
+                    return true;
+                }
+
+                var measuredHeight = 2f * distance * halfAngleTan;
+                var ratio = measuredHeight / typicalHeight.Value;
+                if (ratio < m_minSizeRatio)
+                {
+                    // Far too small for this class: a picture, a toy, a reflection or just a false positive
+                    return false;
+                }
+                if (ratio > m_maxSizeRatio && estimatedDistance.HasValue)
+                {
+                    // Far too big: the depth ray most likely passed through the object and hit what's behind it
+                    distance = estimatedDistance.Value;
+                }
+                return true;
+            }
+
+            // No depth (too far for the sensor, sky, etc.): use the size-based estimate if there is one
+            if (estimatedDistance.HasValue)
+            {
+                distance = estimatedDistance.Value;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>IoU between an existing box and a new box given in world space, measured in the existing box's plane.</summary>

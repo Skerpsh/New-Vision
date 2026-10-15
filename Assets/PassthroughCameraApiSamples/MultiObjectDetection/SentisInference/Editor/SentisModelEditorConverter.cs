@@ -34,8 +34,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection.Editor
 
         private void ConvertModel()
         {
+            var sentisPath = ConvertToSentis(m_targetClass.OnnxModel);
+
+            // use the generated model
+            serializedObject.Update();
+            serializedObject.FindProperty("m_sentisModel").objectReferenceValue = AssetDatabase.LoadAssetAtPath<ModelAsset>(sentisPath);
+            _ = serializedObject.ApplyModifiedProperties();
+            Debug.Log($"[NewVision] Sentis model saved to {sentisPath} and assigned");
+        }
+
+        /// <summary>
+        /// Converts a YOLO ONNX model (output shape (1, 84, N)) to a Sentis model with outputs (corners, classIDs, scores),
+        /// saved next to the ONNX file, e.g. yolo11n_320.onnx -> yolo11n_320.sentis. Returns the asset path of the result.
+        /// </summary>
+        public static string ConvertToSentis(ModelAsset onnxModel)
+        {
             //Load model
-            var model = ModelLoader.Load(m_targetClass.OnnxModel);
+            var model = ModelLoader.Load(onnxModel);
 
             //Here we transform the output of the model by feeding it through a Non-Max-Suppression layer.
             var graph = new FunctionalGraph();
@@ -58,18 +73,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection.Editor
             var corners = Functional.MatMul(boxCoords, centersToCorners);                    //shape=(N,4)
             var modelFinal = graph.Compile(corners, classIDs, scores);
 
-            //Export the model to Sentis format next to the ONNX file, e.g. yolo11n_320.onnx -> yolo11n_320.sentis
-            var onnxPath = AssetDatabase.GetAssetPath(m_targetClass.OnnxModel);
+            //Export the model to Sentis format next to the ONNX file.
+            // Float16 weights keep almost full accuracy (Uint8 noticeably hurts small models) at 2x the size of Uint8.
+            var onnxPath = AssetDatabase.GetAssetPath(onnxModel);
             var sentisPath = System.IO.Path.ChangeExtension(onnxPath, ".sentis");
-            ModelQuantizer.QuantizeWeights(QuantizationType.Uint8, ref modelFinal);
+            ModelQuantizer.QuantizeWeights(QuantizationType.Float16, ref modelFinal);
             ModelWriter.Save(sentisPath, modelFinal);
-
-            // refresh assets and use the generated model
             AssetDatabase.Refresh();
-            serializedObject.Update();
-            serializedObject.FindProperty("m_sentisModel").objectReferenceValue = AssetDatabase.LoadAssetAtPath<ModelAsset>(sentisPath);
-            _ = serializedObject.ApplyModifiedProperties();
-            Debug.Log($"[NewVision] Sentis model saved to {sentisPath} and assigned");
+            return sentisPath;
         }
     }
 }
