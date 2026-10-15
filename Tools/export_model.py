@@ -1,3 +1,6 @@
+# Copyright (c) 2026 New Vision contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Exports an Ultralytics YOLO model to ONNX for New Vision and puts it into the Unity project.
 
 Usage (from any folder, with the venv that has `ultralytics` installed):

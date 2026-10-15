@@ -1,3 +1,6 @@
+// Copyright (c) 2026 New Vision contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Fits the camera image into the square network input without stretching (letterbox),
 // filling the empty bands with gray (114, 114, 114) like YOLO was trained with.
 Shader "Hidden/NewVision/Letterbox"

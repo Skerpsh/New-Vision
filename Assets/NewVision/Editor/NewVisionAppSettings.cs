@@ -1,3 +1,6 @@
+// Copyright (c) 2026 New Vision contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 using System.Linq;
 using PassthroughCameraSamples.MultiObjectDetection;
 using PassthroughCameraSamples.MultiObjectDetection.Editor;

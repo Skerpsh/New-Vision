@@ -1,4 +1,7 @@
-﻿"""Draws the New Vision app icon: dark background, a crisp green detection frame and 'NV'."""
+# Copyright (c) 2026 New Vision contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
+"""Draws the New Vision app icon: dark background, a crisp green detection frame and 'NV'."""
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
