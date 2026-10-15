@@ -196,6 +196,9 @@ This repository combines components under different licenses:
 
 ## Acknowledgements
 
+Based on Meta's [Unity-PassthroughCameraApiSamples](https://github.com/oculus-samples/Unity-PassthroughCameraApiSamples)
+by **Kyrylo Kuzyk**, **Jordi Ramon** and the Meta Reality Labs team.
+
 - [Meta — Unity-PassthroughCameraApiSamples](https://github.com/oculus-samples/Unity-PassthroughCameraApiSamples)
 - [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics)
 - [Unity Inference Engine](https://docs.unity3d.com/Packages/com.unity.ai.inference@latest)
