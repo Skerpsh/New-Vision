@@ -46,6 +46,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void Update()
         {
+            // Buttons belong to the class filter menu while it is open
+            if (ClassFilterMenu.BlocksInput)
+            {
+                return;
+            }
+
             if (!m_isStarted)
             {
                 // Manage the Initial Ui Menu
@@ -216,7 +222,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var newCount = 0;
             foreach (SentisInferenceUiManager.BoundingBoxData box in m_uiInference.m_boxDrawn)
             {
-                if (!HasExistingMarkerInBoundingBox(box))
+                // Boxes that are not confirmed yet are invisible and may be false positives
+                if (box.Confirmed && !HasExistingMarkerInBoundingBox(box))
                 {
                     LogSpatialAnchor($"spawn marker {box.ClassName}");
                     var marker = Instantiate(m_spawnMarker, box.BoxRectTransform.position, box.BoxRectTransform.rotation, m_uiInference.ContentParent);

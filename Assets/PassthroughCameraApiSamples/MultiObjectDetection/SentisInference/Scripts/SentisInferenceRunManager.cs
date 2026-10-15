@@ -34,6 +34,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private Worker m_engine;
         private Vector2Int m_inputSize;
+        private ClassFilterMenu m_classFilter;
         private readonly List<(int classId, Vector4 boundingBox, float score)> m_detections = new List<(int classId, Vector4 boundingBox, float score)>();
 
         private void Awake()
@@ -47,6 +48,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private IEnumerator Start()
         {
             m_uiInference.SetLabels(m_labelsAsset);
+
+            // Menu to choose which classes are detected; boxes of switched-off classes disappear right away
+            m_classFilter = gameObject.AddComponent<ClassFilterMenu>();
+            m_classFilter.Init(m_labelsAsset);
+            m_classFilter.Changed += _ => m_uiInference.ClearAnnotations();
 
             while (true)
             {
@@ -147,7 +153,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 yield break;
             }
 
-            NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold);
+            NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold, m_classFilter.EnabledClasses);
             Debug.Log($"[NewVision] inference {m_backend}: {(Time.realtimeSinceStartup - inferenceStartTime) * 1000f:F0} ms, {m_detections.Count} objects");
 
             // Checking if spatial anchor is tracked ensures bounding boxes are placed at correct world space positIons.
@@ -160,16 +166,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_uiInference.DrawUIBoxes(m_detections, m_inputSize, cachedCameraPose);
         }
 
-        private static void NonMaxSuppression(List<(int classId, Vector4 boundingBox, float score)> outDetections, Tensor<float> boxes, Tensor<int> classIDs, Tensor<float> scores, float iouThreshold, float scoreThreshold)
+        private static void NonMaxSuppression(List<(int classId, Vector4 boundingBox, float score)> outDetections, Tensor<float> boxes, Tensor<int> classIDs, Tensor<float> scores, float iouThreshold, float scoreThreshold, bool[] enabledClasses)
         {
             outDetections.Clear();
 
-            // Filter by score threshold first
+            // Filter by score threshold and by the classes chosen in the menu first,
+            // so a switched-off class can't suppress an overlapping box of a wanted class
             List<int> filteredIndices = new List<int>();
             NativeArray<float>.ReadOnly scoresArray = scores.AsReadOnlyNativeArray();
+            NativeArray<int>.ReadOnly classIDsArray = classIDs.AsReadOnlyNativeArray();
             for (int i = 0; i < scoresArray.Length; i++)
             {
-                if (scoresArray[i] >= scoreThreshold)
+                if (scoresArray[i] >= scoreThreshold && (enabledClasses == null || enabledClasses[classIDsArray[i]]))
                 {
                     filteredIndices.Add(i);
                 }

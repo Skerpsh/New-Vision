@@ -23,6 +23,13 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [SerializeField] private float m_frameThicknessPerMeter = 0.004f;
         [Tooltip("Label scale per meter of distance to the head, so text has the same apparent size near and far.")]
         [SerializeField] private float m_labelScalePerMeter = 0.0002f;
+
+        [Header("False positive filter")]
+        [Tooltip("A box becomes visible only after the object is detected this many times in a row. " +
+                 "Real objects are found frame after frame (even far away); false positives flicker for a frame or two.")]
+        [SerializeField, Min(1)] private int m_hitsToConfirm = 3;
+        [Tooltip("Max seconds between two detections that still count as 'in a row'. Unconfirmed boxes also vanish after this time.")]
+        [SerializeField] private float m_maxGapBetweenHits = 0.4f;
         [Space(10)]
         public UnityEvent<int> OnObjectsDetected;
 
@@ -45,6 +52,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             public Quaternion TargetRotation;
             public Vector2 TargetSize;
             public bool IsNew;
+
+            // False positive filter: the box is shown only once Confirmed
+            public int Hits;
+            public bool Confirmed;
         }
 
         private void Awake()
@@ -83,7 +94,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 var box = m_boxDrawn[i];
                 const float timeToPersistBoxes = 3f;
-                if (Time.time - box.lastUpdateTime > timeToPersistBoxes)
+                var persistTime = box.Confirmed ? timeToPersistBoxes : m_maxGapBetweenHits;
+                if (Time.time - box.lastUpdateTime > persistTime)
                 {
                     ReturnToPool(box);
                     m_boxDrawn.RemoveAt(i);
@@ -196,6 +208,24 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 boxData.TargetPosition = worldSpaceCenter;
                 boxData.TargetRotation = Quaternion.LookRotation(normal);
                 boxData.TargetSize = size;
+
+                // False positive filter: count detections in a row, show the box once there are enough
+                if (!boxData.Confirmed)
+                {
+                    if (!boxData.IsNew && Time.time - boxData.lastUpdateTime > m_maxGapBetweenHits)
+                    {
+                        boxData.Hits = 0;
+                    }
+                    boxData.Hits++;
+                    if (boxData.Hits >= m_hitsToConfirm)
+                    {
+                        boxData.Confirmed = true;
+                        // Now that this object is certain, it replaces confirmed boxes of other classes at the same place
+                        RemoveOverlappingBoxesOfOtherClasses(boxData);
+                    }
+                    ApplyVisibility(boxData);
+                }
+
                 if (boxData.IsNew)
                 {
                     // A freshly shown box appears right on the object instead of flying in
@@ -213,25 +243,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             for (int i = m_boxDrawn.Count - 1; i >= 0; i--)
             {
                 var box = m_boxDrawn[i];
-                var localPos = box.BoxRectTransform.InverseTransformPoint(worldSpaceCenter);
-                var newBox = new Vector4(
-                    localPos.x - worldSpaceSize.x * 0.5f,
-                    localPos.y - worldSpaceSize.y * 0.5f,
-                    localPos.x + worldSpaceSize.x * 0.5f,
-                    localPos.y + worldSpaceSize.y * 0.5f
-                );
-
-                var sizeDelta = box.BoxRectTransform.sizeDelta;
-                var currentBox = new Vector4(
-                    -sizeDelta.x * 0.5f,
-                    -sizeDelta.y * 0.5f,
-                    sizeDelta.x * 0.5f,
-                    sizeDelta.y * 0.5f);
+                var iou = OverlapIoU(box, worldSpaceCenter, worldSpaceSize);
 
                 if (box.ClassId == classId)
                 {
                     // If the new box overlaps with an existing one of the same class, reuse it
-                    if (SentisInferenceRunManager.CalculateIoU(newBox, currentBox) > 0f)
+                    if (iou > 0f)
                     {
                         if (reusedBox == null)
                         {
@@ -239,16 +256,22 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                         }
                         else
                         {
-                            // Same overlapping class - remove the existing box
-                            ReturnToPool(box);
-                            m_boxDrawn.RemoveAt(i);
+                            // Same overlapping class - keep the confirmed (visible) one, remove the other
+                            var dropped = box.Confirmed && !reusedBox.Confirmed ? reusedBox : box;
+                            if (dropped == reusedBox)
+                            {
+                                reusedBox = box;
+                            }
+                            ReturnToPool(dropped);
+                            _ = m_boxDrawn.Remove(dropped);
                         }
                     }
                 }
-                // If the new box's IoU with another class is significant, remove the existing box
-                else if (SentisInferenceRunManager.CalculateIoU(newBox, currentBox) > 0.1f)
+                // Different overlapping class: drop the existing box only if it is unconfirmed.
+                // Confirmed boxes are replaced only once the new detection is confirmed too (see RemoveOverlappingBoxesOfOtherClasses),
+                // so a single false positive can't knock out a real object's box.
+                else if (!box.Confirmed && iou > 0.1f)
                 {
-                    // Different overlapping class - remove the existing box
                     ReturnToPool(box);
                     m_boxDrawn.RemoveAt(i);
                 }
@@ -264,8 +287,58 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             newData.ClassId = classId;
             newData.ClassName = m_labels[classId];
             newData.IsNew = true;
+            newData.Hits = 0;
+            newData.Confirmed = false;
+            ApplyVisibility(newData);
             m_boxDrawn.Add(newData);
             return newData;
+        }
+
+        /// <summary>IoU between an existing box and a new box given in world space, measured in the existing box's plane.</summary>
+        private static float OverlapIoU(BoundingBoxData box, Vector3 worldSpaceCenter, Vector2 worldSpaceSize)
+        {
+            var localPos = box.BoxRectTransform.InverseTransformPoint(worldSpaceCenter);
+            var newBox = new Vector4(
+                localPos.x - worldSpaceSize.x * 0.5f,
+                localPos.y - worldSpaceSize.y * 0.5f,
+                localPos.x + worldSpaceSize.x * 0.5f,
+                localPos.y + worldSpaceSize.y * 0.5f
+            );
+
+            var sizeDelta = box.BoxRectTransform.sizeDelta;
+            var currentBox = new Vector4(
+                -sizeDelta.x * 0.5f,
+                -sizeDelta.y * 0.5f,
+                sizeDelta.x * 0.5f,
+                sizeDelta.y * 0.5f);
+
+            return SentisInferenceRunManager.CalculateIoU(newBox, currentBox);
+        }
+
+        private void RemoveOverlappingBoxesOfOtherClasses(BoundingBoxData confirmedBox)
+        {
+            for (int i = m_boxDrawn.Count - 1; i >= 0; i--)
+            {
+                var box = m_boxDrawn[i];
+                if (box != confirmedBox && box.ClassId != confirmedBox.ClassId &&
+                    OverlapIoU(box, confirmedBox.TargetPosition, confirmedBox.TargetSize) > 0.1f)
+                {
+                    ReturnToPool(box);
+                    m_boxDrawn.RemoveAt(i);
+                }
+            }
+        }
+
+        private static void ApplyVisibility(BoundingBoxData box)
+        {
+            if (box.Frame != null)
+            {
+                box.Frame.enabled = box.Confirmed;
+            }
+            if (box.Label != null)
+            {
+                box.Label.enabled = box.Confirmed;
+            }
         }
 
         private BoundingBoxData GetBoxFromPoolOrCreate()
