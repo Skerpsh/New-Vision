@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420">
+  <title>New Vision — real-time object detection and AI object info for Meta Quest 3</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0e13"/>
+      <stop offset="1" stop-color="#121c25"/>
+    </linearGradient>
+    <linearGradient id="view" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2631"/>
+      <stop offset="1" stop-color="#0f161d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#5cfd9b" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#5cfd9b" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+    <clipPath id="viewClip">
+      <rect x="676" y="36" width="568" height="348" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="420" rx="24" fill="url(#bg)"/>
+  <rect width="1280" height="420" rx="24" fill="url(#grid)"/>
+  <circle cx="960" cy="210" r="330" fill="url(#glow)"/>
+
+  <!-- Left: title -->
+  <g font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <text x="64" y="118" fill="#5cfd9b" font-size="17" font-weight="600" letter-spacing="3.5">META QUEST 3 · MIXED REALITY</text>
+    <text x="60" y="204" fill="#f4f7fa" font-size="86" font-weight="700" letter-spacing="-1.5">New Vision</text>
+    <text x="64" y="252" fill="#a7b3bf" font-size="23">Real-time object detection on the headset,</text>
+    <text x="64" y="285" fill="#a7b3bf" font-size="23">and AI answers about anything you look at.</text>
+
+    <g font-size="16" font-weight="600">
+      <rect x="64" y="318" width="176" height="36" rx="18" fill="#5cfd9b" fill-opacity="0.12" stroke="#5cfd9b" stroke-opacity="0.45"/>
+      <text x="152" y="341" fill="#bff8d4" text-anchor="middle">On-device YOLO11</text>
+      <rect x="252" y="318" width="132" height="36" rx="18" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="318" y="341" fill="#d6dde4" text-anchor="middle">~10 FPS · GPU</text>
+      <rect x="396" y="318" width="156" height="36" rx="18" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.18"/>
+      <text x="474" y="341" fill="#d6dde4" text-anchor="middle">Gemini lookup</text>
+    </g>
+  </g>
+
+  <!-- Right: stylized passthrough view -->
+  <rect x="676" y="36" width="568" height="348" rx="18" fill="url(#view)"/>
+  <g clip-path="url(#viewClip)">
+    <!-- room: floor and shelf -->
+    <path d="M676 352H1244" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+    <path d="M880 330H1040M896 330V352M1024 330V352" stroke="#c9d3dc" stroke-opacity="0.35" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- chair -->
+    <g fill="none" stroke="#c9d3dc" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M820 178V346"/>
+      <path d="M742 262H820"/>
+      <path d="M750 262V346"/>
+      <path d="M820 196H800M820 222H800"/>
+      <path d="M742 262Q740 252 752 250H818"/>
+    </g>
+
+    <!-- mug on the shelf -->
+    <g fill="none" stroke="#c9d3dc" stroke-opacity="0.6" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M936 270H990V316Q990 328 978 328H948Q936 328 936 316Z"/>
+      <path d="M990 282Q1008 282 1008 297Q1008 312 990 312"/>
+      <path d="M952 254Q946 246 952 238Q958 230 952 222M972 254Q966 246 972 238Q978 230 972 222" stroke-opacity="0.3" stroke-width="3"/>
+    </g>
+
+    <!-- potted plant -->
+    <g fill="none" stroke="#c9d3dc" stroke-opacity="0.55" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1112 300H1172L1164 348H1120Z"/>
+      <path d="M1142 300V248"/>
+      <path d="M1142 266Q1112 254 1106 222Q1136 226 1142 262"/>
+      <path d="M1142 258Q1170 240 1180 210Q1150 214 1142 254"/>
+      <path d="M1142 280Q1120 278 1108 262"/>
+    </g>
+
+    <!-- detection frames -->
+    <g fill="none" stroke="#5cfd9b" stroke-width="2.5">
+      <rect x="726" y="166" width="112" height="190"/>
+      <rect x="1094" y="196" width="98" height="162"/>
+    </g>
+    <g font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" font-weight="700"
+       fill="#5cfd9b" stroke="#05080b" stroke-width="4" paint-order="stroke" stroke-linejoin="round">
+      <text x="726" y="158">Chair 87%</text>
+      <text x="1094" y="188">Potted plant 72%</text>
+    </g>
+
+    <!-- reticle with dwell ring on the mug -->
+    <circle cx="963" cy="298" r="15" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="4"/>
+    <circle cx="963" cy="298" r="15" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="4"
+            stroke-dasharray="66 95" transform="rotate(-90 963 298)" stroke-linecap="round"/>
+    <circle cx="963" cy="298" r="4.5" fill="#ffffff" fill-opacity="0.8"/>
+
+    <!-- answer panel -->
+    <path d="M963 280V178" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.5" stroke-dasharray="4 5"/>
+    <rect x="884" y="60" width="200" height="118" rx="12" fill="#0b1015" fill-opacity="0.86" stroke="#ffffff" stroke-opacity="0.12"/>
+    <g font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+      <text x="902" y="92" fill="#8cffb4" font-size="19" font-weight="700">Ceramic mug</text>
+      <g fill="#e8edf2" font-size="14">
+        <text x="902" y="119">• Stoneware, about 350 ml</text>
+        <text x="902" y="141">• Dishwasher safe</text>
+        <text x="902" y="163">• Keeps coffee warm longer</text>
+      </g>
+    </g>
+  </g>
+  <rect x="676" y="36" width="568" height="348" rx="18" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+</svg>
