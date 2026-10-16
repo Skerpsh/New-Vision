@@ -19,4 +19,6 @@
   <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
   <uses-permission android:name="com.oculus.permission.USE_SCENE" />
   <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
+  <!-- Object info lookup (Gemini API) -->
+  <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

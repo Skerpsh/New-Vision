@@ -2,28 +2,18 @@
 
 using System.Collections;
 using System.Collections.Generic;
-using Meta.XR;
 using Meta.XR.Samples;
 using UnityEngine;
-using UnityEngine.Events;
 
 namespace PassthroughCameraSamples.MultiObjectDetection
 {
     [MetaCodeSample("PassthroughCameraApiSamples-MultiObjectDetection")]
     public class DetectionManager : MonoBehaviour
     {
-        [SerializeField] private PassthroughCameraAccess m_cameraAccess;
         [SerializeField] private DetectionUiMenuManager m_menuManager;
-
-        [Header("Placement configuration")]
-        [SerializeField] private DetectionSpawnMarkerAnim m_spawnMarker;
-
         [SerializeField] private SentisInferenceUiManager m_uiInference;
-        [Space(10)]
-        public UnityEvent<int> OnObjectsIdentified;
 
-        private readonly List<DetectionSpawnMarkerAnim> m_spawnedEntities = new();
-        private bool m_isStarted;
+        // Keeps the detection boxes fixed in the room even if head tracking is lost for a moment
         internal OVRSpatialAnchor m_spatialAnchor;
         private bool m_isHeadsetTracking;
 
@@ -43,38 +33,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void OnTrackingLost() => m_isHeadsetTracking = false;
         private void OnTrackingAcquired() => m_isHeadsetTracking = true;
-
-        private void Update()
-        {
-            // Buttons belong to the class filter menu while it is open
-            if (ClassFilterMenu.BlocksInput)
-            {
-                return;
-            }
-
-            if (!m_isStarted)
-            {
-                // Manage the Initial Ui Menu
-                if (m_cameraAccess.IsPlaying)
-                {
-                    m_isStarted = true;
-                }
-            }
-            else
-            {
-                // Press A button to spawn 3d markers
-                if (InputManager.IsButtonADownOrPinchStarted())
-                {
-                    SpawnCurrentDetectedObjects();
-                }
-            }
-
-            // Press B button to clean all markers
-            if (InputManager.IsButtonBDownOrMiddleFingerPinchStarted())
-            {
-                CleanMarkers();
-            }
-        }
 
         private IEnumerator UpdateSpatialAnchor()
         {
@@ -182,7 +140,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
                 LogSpatialAnchor($"tracking restoration failed after {numRetries} retries", LogType.Warning);
                 EraseSpatialAnchor();
-                CleanMarkers();
                 m_uiInference.ClearAnnotations();
             }
         }
@@ -198,68 +155,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
         }
 
-        private void CleanMarkers()
-        {
-            LogSpatialAnchor("CleanMarkers");
-            foreach (var e in m_spawnedEntities)
-            {
-                Destroy(e.gameObject);
-            }
-            m_spawnedEntities.Clear();
-            OnObjectsIdentified?.Invoke(-1);
-        }
-
         private static void LogSpatialAnchor(string message, LogType logType = LogType.Log)
         {
             Debug.unityLogger.Log(logType, $"{nameof(OVRSpatialAnchor)}: {message}");
-        }
-
-        /// <summary>
-        /// Spwan 3d markers for the detected objects
-        /// </summary>
-        private void SpawnCurrentDetectedObjects()
-        {
-            var newCount = 0;
-            foreach (SentisInferenceUiManager.BoundingBoxData box in m_uiInference.m_boxDrawn)
-            {
-                // Only visible boxes: unconfirmed ones may be false positives, the rest are hidden by the top-N limit
-                if (box.Shown && !HasExistingMarkerInBoundingBox(box))
-                {
-                    LogSpatialAnchor($"spawn marker {box.ClassName}");
-                    var marker = Instantiate(m_spawnMarker, box.BoxRectTransform.position, box.BoxRectTransform.rotation, m_uiInference.ContentParent);
-                    marker.GetComponent<DetectionSpawnMarkerAnim>().SetYoloClassName(box.ClassName);
-
-                    m_spawnedEntities.Add(marker);
-                    newCount++;
-                }
-            }
-            OnObjectsIdentified?.Invoke(newCount);
-
-            bool HasExistingMarkerInBoundingBox(SentisInferenceUiManager.BoundingBoxData box)
-            {
-                foreach (var marker in m_spawnedEntities)
-                {
-                    if (marker.GetYoloClassName() == box.ClassName)
-                    {
-                        var markerWorldPos = marker.transform.position;
-                        Vector2 localPos = box.BoxRectTransform.InverseTransformPoint(markerWorldPos);
-                        var sizeDelta = box.BoxRectTransform.sizeDelta;
-                        var currentBox = new Rect(
-                            -sizeDelta.x * 0.5f,
-                            -sizeDelta.y * 0.5f,
-                            sizeDelta.x,
-                            sizeDelta.y
-                        );
-
-                        if (currentBox.Contains(localPos))
-                        {
-                            return true;
-                        }
-                    }
-                }
-
-                return false;
-            }
         }
     }
 }

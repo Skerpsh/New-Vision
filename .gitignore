@@ -26,3 +26,6 @@ Packages/packages-lock.json
 # Python / model export (weights are downloaded by Ultralytics, keep them out of git)
 *.pt
 __pycache__/
+
+# Gemini API key (lives only on the headset / your PC, never in git)
+gemini_api_key.txt

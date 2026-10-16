@@ -105,6 +105,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // The switch itself happens between two inferences (see RunInference)
             m_classFilter.SetModelOptions(modelNames, m_modelIndex, index => m_requestedModelIndex = index);
 
+            // Look at anything for 2 s (or pinch / pull a trigger) and Gemini tells what it is
+            gameObject.AddComponent<ObjectInfoLookup>().Init(m_cameraAccess, m_uiInference, () => m_uiMenuManager.IsPaused);
+
             // Hide the boundary (Guardian) so you can walk around freely, e.g. outdoors. Works while passthrough is on;
             // needs 'Boundary Visibility Support' in the project config (New Vision > Apply App Settings).
             if (OVRManager.instance != null)

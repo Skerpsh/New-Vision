@@ -7,8 +7,8 @@
 
 **Real-time object detection in mixed reality for Meta Quest 3.**
 New Vision shows your surroundings through passthrough and outlines objects — chairs, tables, plants, people, cars
-and 70+ more — with crisp, horizon-level boxes and readable labels like `Chair 87%`. Everything runs on the headset;
-no PC or network connection is needed.
+and 70+ more — with crisp, horizon-level boxes and readable labels like `Chair 87%`. Detection runs entirely on the
+headset; no PC or network connection is needed. Optionally, look at anything for two seconds and Gemini tells you what it is.
 
 It is built on Meta's [Unity-PassthroughCameraApiSamples](https://github.com/oculus-samples/Unity-PassthroughCameraApiSamples)
 (`MultiObjectDetection` scene), reworked for speed, accuracy, readability and walking around freely, including outdoors.
@@ -24,12 +24,16 @@ It is built on Meta's [Unity-PassthroughCameraApiSamples](https://github.com/ocu
 - **Readable overlay**: sharp rectangular frames that stay level with the horizon, smooth motion,
   labels that keep the same apparent size at any distance.
 - **Walk around freely**: the boundary (Guardian) is hidden while passthrough is on.
+- **"What is this?"** (optional, needs internet and a Gemini API key): keep the reticle on any object — not only the
+  80 detected classes — for 2 seconds, or pinch / pull a trigger, and a panel next to it tells what it is,
+  with facts from Google Search. See [What is this?](#what-is-this-gemini).
+- **Less clutter**: frames are shown only for the 3 most confident objects at a time.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A[Passthrough camera<br/>800×600] --> B[Letterbox to<br/>320 / 416 square]
+    A[Passthrough camera<br/>1280×960] --> B[Letterbox to<br/>320 / 416 square]
     B --> C[YOLO11 on GPU<br/>Unity Inference Engine]
     C --> D[Class filter<br/>+ NMS]
     D --> E{Depth hit?}
@@ -79,11 +83,37 @@ Detection starts right away.
 |---|---|---|
 | **Y** or **☰** (left controller) | open the menu | close the menu |
 | **Thumbstick** | — | move up/down; left/right jumps 10 rows |
-| **A** (or index pinch) | place 3D markers on detected objects | toggle the selected row |
-| **X** / **trigger** | — | toggle the selected row |
-| **B** (or middle-finger pinch) | remove the markers | close the menu |
+| **A** / **X** | — | toggle the selected row |
+| **Trigger** or **index pinch** | "What is this?" for the object under the reticle | toggle the selected row (trigger) |
+| **B** | — | close the menu |
 
 The menu has a **Model** row (cycles through the models), quick presets, and a checkbox per object class.
+
+Looking at the same spot for 2 seconds also starts "What is this?" — a ring around the reticle fills up first,
+so just look away if you didn't mean it.
+
+## What is this? (Gemini)
+
+The headset sends a crop of the camera image around the reticle (with the point marked) to
+[Gemini](https://ai.google.dev/) together with the on-device guess, and shows the answer next to the object.
+Every lookup is a new request (no cache: the same spot may hold a different object). The image is sent to Google's servers.
+
+1. Create a free API key in [Google AI Studio](https://aistudio.google.com/apikey). A Gemini app subscription is not needed
+   and does not include API access.
+2. Save it in a text file named `gemini_api_key.txt` **outside the repository**, and copy it to the headset (after the
+   app has been installed once):
+   ```bash
+   adb push gemini_api_key.txt /sdcard/Android/data/com.newvision.app/files/gemini_api_key.txt
+   ```
+   The key stays on the headset only — it is not built into the APK or committed. Uninstalling the app deletes it.
+3. The last image sent is saved on the headset as `files/last_lookup.jpg` (handy to check what Gemini saw).
+
+Models are set on `ObjectInfoLookup`: `gemini-3.5-flash-lite` (answers in ~2–4 s), falling back to `gemini-3.8-flash`
+when it is overloaded. A free-tier key is enough for personal use, but Google Search grounding needs a paid plan —
+without one the app notices the quota error and answers from the model's own knowledge.
+See [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+To check a key and the request from the PC: `python Tools/test_gemini.py path/to/gemini_api_key.txt [image]`.
 
 ## Models
 

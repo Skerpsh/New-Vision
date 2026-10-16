@@ -25,7 +25,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         // start menu
         private int m_objectsDetected = 0;
-        private int m_objectsIdentified = 0;
 
         // pause menu
         public bool IsPaused { get; private set; } = true;
@@ -102,26 +101,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         #region Ui state: detection information
         private void UpdateLabelInformation()
         {
-            m_labelInformation.text = $"New Vision\nObjects in view: {m_objectsDetected}\nMarkers placed: {m_objectsIdentified}";
+            m_labelInformation.text = $"New Vision\nObjects in view: {m_objectsDetected}";
         }
 
         public void OnObjectsDetected(int objects)
         {
             m_objectsDetected = objects;
-            UpdateLabelInformation();
-        }
-
-        public void OnObjectsIndentified(int objects)
-        {
-            if (objects < 0)
-            {
-                // reset the counter
-                m_objectsIdentified = 0;
-            }
-            else
-            {
-                m_objectsIdentified += objects;
-            }
             UpdateLabelInformation();
         }
         #endregion
