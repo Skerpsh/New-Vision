@@ -222,8 +222,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var newCount = 0;
             foreach (SentisInferenceUiManager.BoundingBoxData box in m_uiInference.m_boxDrawn)
             {
-                // Boxes that are not confirmed yet are invisible and may be false positives
-                if (box.Confirmed && !HasExistingMarkerInBoundingBox(box))
+                // Only visible boxes: unconfirmed ones may be false positives, the rest are hidden by the top-N limit
+                if (box.Shown && !HasExistingMarkerInBoundingBox(box))
                 {
                     LogSpatialAnchor($"spawn marker {box.ClassName}");
                     var marker = Instantiate(m_spawnMarker, box.BoxRectTransform.position, box.BoxRectTransform.rotation, m_uiInference.ContentParent);

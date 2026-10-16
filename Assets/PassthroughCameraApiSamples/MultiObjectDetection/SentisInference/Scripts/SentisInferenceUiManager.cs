@@ -31,6 +31,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [Tooltip("Max seconds between two detections that still count as 'in a row'. Unconfirmed boxes also vanish after this time.")]
         [SerializeField] private float m_maxGapBetweenHits = 0.4f;
 
+        [Header("Visual noise")]
+        [Tooltip("Show frames only for this many confirmed objects at once - the ones with the highest confidence.")]
+        [SerializeField, Min(1)] private int m_maxVisibleBoxes = 3;
+        [Tooltip("Confidence bonus for a box that is already shown, so two objects with similar confidence don't keep swapping.")]
+        [SerializeField] private float m_visibleScoreBonus = 0.05f;
+
         [Header("Real size check and far objects")]
         [Tooltip("Reject a detection if its real height (from depth) is below this fraction of the typical height of its class.")]
         [SerializeField] private float m_minSizeRatio = 0.3f;
@@ -46,6 +52,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private string[] m_labels;
         private readonly List<BoundingBoxData> m_boxPool = new();
         private Transform m_head;
+        private readonly List<BoundingBoxData> m_rankedBoxes = new();
+        private System.Comparison<BoundingBoxData> m_byRankDescending;
 
         internal class BoundingBoxData
         {
@@ -65,6 +73,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // False positive filter: the box is shown only once Confirmed
             public int Hits;
             public bool Confirmed;
+
+            // Top-N limit: latest confidence and whether the box is among the shown ones
+            public float Score;
+            public bool Shown;
         }
 
         private void Awake()
@@ -110,6 +122,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     m_boxDrawn.RemoveAt(i);
                 }
             }
+            UpdateShownBoxes();
 
             // Move boxes smoothly towards their latest detected position and size (frame-rate independent exponential smoothing).
             // Rotation is not interpolated: every frame the box faces the current head position and stays level with the horizon.
@@ -216,6 +229,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 boxData.TargetPosition = worldSpaceCenter;
                 boxData.TargetRotation = Quaternion.LookRotation(normal);
                 boxData.TargetSize = size;
+                boxData.Score = detection.score;
 
                 // False positive filter: count detections in a row, show the box once there are enough
                 if (!boxData.Confirmed)
@@ -231,7 +245,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                         // Now that this object is certain, it replaces confirmed boxes of other classes at the same place
                         RemoveOverlappingBoxesOfOtherClasses(boxData);
                     }
-                    ApplyVisibility(boxData);
                 }
 
                 if (boxData.IsNew)
@@ -243,7 +256,43 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 }
                 boxData.lastUpdateTime = Time.time;
             }
+            UpdateShownBoxes();
         }
+
+        /// <summary>
+        /// Shows only the most confident confirmed boxes (up to m_maxVisibleBoxes) to keep the view uncluttered.
+        /// The rest keep being tracked invisibly, so they can take over instantly when a shown object disappears.
+        /// </summary>
+        private void UpdateShownBoxes()
+        {
+            m_rankedBoxes.Clear();
+            foreach (var box in m_boxDrawn)
+            {
+                if (box.Confirmed)
+                {
+                    m_rankedBoxes.Add(box);
+                }
+                else if (box.Shown)
+                {
+                    box.Shown = false;
+                    ApplyVisibility(box);
+                }
+            }
+            m_byRankDescending ??= (a, b) => RankScore(b).CompareTo(RankScore(a));
+            m_rankedBoxes.Sort(m_byRankDescending);
+            for (var i = 0; i < m_rankedBoxes.Count; i++)
+            {
+                var box = m_rankedBoxes[i];
+                var shown = i < m_maxVisibleBoxes;
+                if (box.Shown != shown)
+                {
+                    box.Shown = shown;
+                    ApplyVisibility(box);
+                }
+            }
+        }
+
+        private float RankScore(BoundingBoxData box) => box.Score + (box.Shown ? m_visibleScoreBonus : 0f);
 
         private BoundingBoxData GetOrCreateBoundingBoxData(int classId, Vector3 worldSpaceCenter, Vector2 worldSpaceSize)
         {
@@ -297,6 +346,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             newData.IsNew = true;
             newData.Hits = 0;
             newData.Confirmed = false;
+            newData.Shown = false;
             ApplyVisibility(newData);
             m_boxDrawn.Add(newData);
             return newData;
@@ -396,11 +446,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         {
             if (box.Frame != null)
             {
-                box.Frame.enabled = box.Confirmed;
+                box.Frame.enabled = box.Shown;
             }
             if (box.Label != null)
             {
-                box.Label.enabled = box.Confirmed;
+                box.Label.enabled = box.Shown;
             }
         }
 
