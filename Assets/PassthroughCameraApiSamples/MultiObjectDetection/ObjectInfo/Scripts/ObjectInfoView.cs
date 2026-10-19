@@ -8,7 +8,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 {
     /// <summary>
     /// Visuals of the object info lookup: the reticle in the middle of the view (dot + filling ring)
-    /// and the answer panel next to the looked-at object. Everything is built in code.
+    /// and the info card that floats in front of the user. Everything is built in code.
     /// </summary>
     public class ObjectInfoView : MonoBehaviour
     {
@@ -18,11 +18,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const float ReticleUnits = 100f;
         private const float SpinSpeed = 360f;
 
-        // Panel: 1 canvas unit = 1 mm at 1 m distance
-        private const float PanelWidth = 440f;
-        private const float PanelMaxDistance = 1.1f;
-        private const float PanelMinDistance = 0.5f;
-        private const float PanelSideAngle = 3.5f;
+        // Card: 1 canvas unit = 1 mm at 1 m distance
+        private const float CardWidth = 620f;
+        private const float CardDistance = 0.85f;
+        private const float CornerRadius = 28f;
+        // Lazy follow: the card stays put while the head turns a little, and glides back to the middle after a bigger turn
+        private const float FollowStartAngle = 16f;
+        private const float FollowStopAngle = 2f;
+        private const float FollowSpeed = 2.5f;
+        // Gentle floating: amplitude (m) and speed of the drift, tilt in degrees
+        private const float BobHeight = 0.006f;
+        private const float BobSide = 0.004f;
+        private const float BobTilt = 0.6f;
+        private const float FadeInSeconds = 0.3f;
+        private const float FadeOutSeconds = 0.2f;
+
+        private static readonly Color TitleColor = new(0.55f, 1f, 0.6f);
+        private const string HeadingColor = "#8FD9FF";
 
         private Transform m_head;
         private RectTransform m_reticle;
@@ -31,20 +43,30 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Image m_ring;
         private float m_reticleDistance = 2f;
 
-        private RectTransform m_panel;
+        private RectTransform m_card;
+        private CanvasGroup m_cardGroup;
         private Text m_title;
+        private Text m_summary;
         private Text m_body;
+        private Text m_footer;
+        private bool m_open;
+        private float m_fade; // 0 hidden .. 1 fully shown
+        private bool m_following;
+        private Vector3 m_direction;
+        private Vector3 m_center;
+        private float m_halfHeight;
+        private float m_floatTime;
+        private string m_waitingText;
 
-        public bool PanelVisible => m_panel.gameObject.activeSelf;
-        public Vector3 PanelPosition => m_panel.position;
+        public bool PanelVisible => m_open;
 
         public void Init(Transform head)
         {
             m_head = head;
             BuildReticle();
-            BuildPanel();
+            BuildCard();
             SetReticleVisible(false);
-            HidePanel();
+            m_card.gameObject.SetActive(false);
         }
 
         public void SetReticleVisible(bool visible)
@@ -83,55 +105,121 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_ringTrack.enabled = busy || fill > 0f;
         }
 
-        /// <summary>Shows the panel just to the right of the object, at most ~1 m away so the text stays readable.</summary>
-        public void ShowPanel(Vector3 objectPosition)
+        /// <summary>Opens the card in the middle of the view; it fades in and then floats there.</summary>
+        public void ShowPanel()
         {
-            var toObject = objectPosition - m_head.position;
-            var direction = toObject.normalized;
-            var distance = Mathf.Clamp(toObject.magnitude, PanelMinDistance, PanelMaxDistance);
-            var right = Vector3.Cross(Vector3.up, direction);
-            right = right.sqrMagnitude < 1e-6f ? m_head.right : right.normalized;
-            var position = m_head.position + direction * distance + right * (distance * Mathf.Tan(PanelSideAngle * Mathf.Deg2Rad));
-            m_panel.localScale = Vector3.one * (0.001f * distance);
-            m_panel.SetPositionAndRotation(position, Quaternion.LookRotation(position - m_head.position, Vector3.up));
-            m_panel.gameObject.SetActive(true);
-        }
-
-        public void HidePanel() => m_panel.gameObject.SetActive(false);
-
-        /// <summary>True if the ray goes through the visible panel (with a small margin around it).</summary>
-        public bool IsLookedAt(Ray ray)
-        {
-            if (!PanelVisible || !new Plane(m_panel.forward, m_panel.position).Raycast(ray, out var enter))
+            if (!m_open || !m_card.gameObject.activeSelf)
             {
-                return false;
+                m_direction = m_head.forward;
+                m_center = m_head.position;
+                m_halfHeight = 0f;
+                m_following = false;
+                m_fade = 0f;
             }
-            Vector2 local = m_panel.InverseTransformPoint(ray.GetPoint(enter));
-            var rect = m_panel.rect;
-            const float margin = 60f;
-            return local.x > rect.xMin - margin && local.x < rect.xMax + margin &&
-                   local.y > rect.yMin - margin && local.y < rect.yMax + margin;
+            m_open = true;
+            m_card.gameObject.SetActive(true);
+            Canvas.ForceUpdateCanvases();
+            m_halfHeight = HalfHeight();
+            UpdateCard(0f);
         }
 
-        public void SetText(string title, string body)
+        /// <summary>Fades the card out.</summary>
+        public void HidePanel()
         {
+            m_open = false;
+            m_waitingText = null;
+        }
+
+        public void SetText(string title, string body) => SetContent(title, null, body);
+
+        /// <summary>
+        /// Title, an optional one-line summary and the body. The body may contain the rich text made by
+        /// <see cref="Heading"/>; everything else must already be cleaned of '&lt;'.
+        /// </summary>
+        public void SetContent(string title, string summary, string body)
+        {
+            m_waitingText = null;
             m_title.text = title;
-            m_body.text = body;
+            m_summary.text = summary ?? "";
+            m_summary.gameObject.SetActive(!string.IsNullOrEmpty(summary));
+            m_body.text = body ?? "";
             m_body.gameObject.SetActive(!string.IsNullOrEmpty(body));
         }
 
+        /// <summary>Shows a status line in the body with animated dots, e.g. "Asking Gemini".</summary>
+        public void SetWaiting(string title, string status)
+        {
+            SetContent(title, null, status);
+            m_waitingText = status;
+        }
+
+        public static string Heading(string text) => $"<color={HeadingColor}><b>{text.ToUpperInvariant()}</b></color>";
+
         private void LateUpdate()
         {
-            // The panel stays where it appeared, but always turns to face the head and stays level
-            if (m_head != null && m_panel != null && m_panel.gameObject.activeSelf)
+            if (m_head == null || m_card == null || !m_card.gameObject.activeSelf)
             {
-                var forward = m_panel.position - m_head.position;
-                if (Vector3.Cross(forward, Vector3.up).sqrMagnitude > 1e-6f)
-                {
-                    m_panel.rotation = Quaternion.LookRotation(forward, Vector3.up);
-                }
+                return;
             }
+
+            if (m_waitingText != null)
+            {
+                m_body.text = m_waitingText + new string('.', 1 + (int)(Time.time * 2.5f) % 3);
+            }
+
+            m_fade = Mathf.MoveTowards(m_fade, m_open ? 1f : 0f, Time.deltaTime / (m_open ? FadeInSeconds : FadeOutSeconds));
+            if (!m_open && m_fade <= 0f)
+            {
+                m_card.gameObject.SetActive(false);
+                return;
+            }
+            UpdateCard(Time.deltaTime);
         }
+
+        private void UpdateCard(float deltaTime)
+        {
+            // Lazy follow of the view direction
+            var forward = m_head.forward;
+            var angle = Vector3.Angle(m_direction, forward);
+            if (angle > FollowStartAngle)
+            {
+                m_following = true;
+            }
+            else if (angle < FollowStopAngle)
+            {
+                m_following = false;
+            }
+            if (m_following)
+            {
+                m_direction = Vector3.Slerp(m_direction, forward, 1f - Mathf.Exp(-FollowSpeed * deltaTime)).normalized;
+            }
+            // The card lags a little behind head movement instead of being glued to it
+            m_center = Vector3.Lerp(m_center, m_head.position, 1f - Mathf.Exp(-4f * deltaTime));
+
+            // Smooth size changes while the answer streams in, so the card grows evenly up and down
+            var scale = 0.001f * CardDistance;
+            m_halfHeight = Mathf.Lerp(m_halfHeight, HalfHeight(), 1f - Mathf.Exp(-8f * deltaTime));
+
+            m_floatTime += deltaTime;
+            var t = m_floatTime;
+            var position = m_center + m_direction * CardDistance;
+            var rotation = Quaternion.LookRotation(position - m_head.position, Vector3.up);
+            var up = rotation * Vector3.up;
+            var right = rotation * Vector3.right;
+            position += up * (BobHeight * Mathf.Sin(t * 1.1f)) + right * (BobSide * Mathf.Sin(t * 0.7f));
+            rotation *= Quaternion.Euler(0f, 0f, BobTilt * Mathf.Sin(t * 0.9f));
+
+            // Pivot is the top edge: put it half the card height above the middle of the view
+            position += up * (m_halfHeight * scale);
+
+            // Fade-in: slight zoom from 94 % with ease-out
+            var eased = 1f - (1f - m_fade) * (1f - m_fade);
+            m_cardGroup.alpha = eased;
+            m_card.localScale = Vector3.one * (scale * Mathf.Lerp(0.94f, 1f, eased));
+            m_card.SetPositionAndRotation(position, rotation);
+        }
+
+        private float HalfHeight() => LayoutUtility.GetPreferredHeight(m_card) * 0.5f;
 
         private void BuildReticle()
         {
@@ -153,36 +241,46 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_dot = CreateImage("Dot", m_reticle, CircleSprite(64, 0f), new Color(1f, 1f, 1f, 0.55f), ReticleUnits * DotRatio);
         }
 
-        private void BuildPanel()
+        private void BuildCard()
         {
-            var canvasGo = new GameObject("InfoPanel", typeof(RectTransform), typeof(Canvas), typeof(Image),
+            var canvasGo = new GameObject("InfoCard", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup), typeof(Image),
                 typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             canvasGo.transform.SetParent(transform, false);
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.sortingOrder = 95;
-            m_panel = (RectTransform)canvasGo.transform;
-            m_panel.pivot = new Vector2(0f, 0.5f); // grows to the right of the object
-            m_panel.sizeDelta = new Vector2(PanelWidth, 100f);
+            m_card = (RectTransform)canvasGo.transform;
+            m_card.pivot = new Vector2(0.5f, 1f); // grows downwards, the top edge is placed in UpdateCard
+            m_card.sizeDelta = new Vector2(CardWidth, 100f);
+            m_cardGroup = canvasGo.GetComponent<CanvasGroup>();
+            m_cardGroup.interactable = false;
+            m_cardGroup.blocksRaycasts = false;
 
             var background = canvasGo.GetComponent<Image>();
-            background.color = new Color(0.05f, 0.07f, 0.09f, 0.78f);
+            background.sprite = RoundedRectSprite((int)CornerRadius);
+            background.type = Image.Type.Sliced;
+            background.color = new Color(0.04f, 0.06f, 0.08f, 0.62f);
             background.raycastTarget = false;
 
             var layout = canvasGo.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(22, 22, 18, 20);
-            layout.spacing = 10f;
+            layout.padding = new RectOffset(28, 28, 22, 18);
+            layout.spacing = 9f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
             canvasGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            m_title = CreateText("Title", m_panel, 34, FontStyle.Bold, new Color(0.55f, 1f, 0.6f));
-            m_body = CreateText("Body", m_panel, 26, FontStyle.Normal, Color.white);
+            m_title = CreateText("Title", m_card, 32, FontStyle.Bold, TitleColor, TextAnchor.UpperLeft);
+            m_summary = CreateText("Summary", m_card, 22, FontStyle.Italic, new Color(0.85f, 0.88f, 0.9f), TextAnchor.UpperLeft);
+            m_body = CreateText("Body", m_card, 21, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            m_body.supportRichText = true;
+            m_body.lineSpacing = 1.12f;
+            m_footer = CreateText("Footer", m_card, 16, FontStyle.Normal, new Color(1f, 1f, 1f, 0.45f), TextAnchor.UpperRight);
+            m_footer.text = "B  or  pinch middle finger + thumb to close";
         }
 
-        private static Text CreateText(string name, Transform parent, int size, FontStyle style, Color color)
+        private static Text CreateText(string name, Transform parent, int size, FontStyle style, Color color, TextAnchor alignment)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             go.transform.SetParent(parent, false);
@@ -192,7 +290,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             text.fontStyle = style;
             text.lineSpacing = 1.05f;
             text.color = color;
-            text.alignment = TextAnchor.UpperLeft;
+            text.alignment = alignment;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.supportRichText = false;
@@ -238,6 +336,33 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             texture.SetPixels32(pixels);
             texture.Apply(false, true);
             return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        /// <summary>White rounded rectangle for a 9-sliced background: corners of the given radius, stretchable middle.</summary>
+        private static Sprite RoundedRectSprite(int radius)
+        {
+            var size = radius * 2 + 2;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    // Distance to the nearest corner circle centre (0 inside the straight middle part)
+                    var dx = Mathf.Max(0f, Mathf.Abs(x + 0.5f - size * 0.5f) - 1f - (size * 0.5f - 1f - radius));
+                    var dy = Mathf.Max(0f, Mathf.Abs(y + 0.5f - size * 0.5f) - 1f - (size * 0.5f - 1f - radius));
+                    var alpha = Mathf.Clamp01(radius + 0.5f - Mathf.Sqrt(dx * dx + dy * dy));
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, true);
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
+                SpriteMeshType.FullRect, new Vector4(radius, radius, radius, radius));
         }
     }
 }

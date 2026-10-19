@@ -24,11 +24,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             "The person is looking at the object marked by the small red circle. " +
             "Identify that object as specifically as you can (brand, model, species, breed, landmark, artwork, etc.). " +
             "Use Google Search when it helps to give accurate, current facts. " +
-            "Answer in English, plain text, no markdown. " +
+            "Answer in English, plain text, no markdown except the section headings described below. " +
             "Line 1: the name of the object, at most 6 words. " +
-            "Then 2 to 4 lines, each starting with \"• \", with the most useful facts for someone looking at it right now " +
-            "(what it is or does, notable details, typical price, tips). At most 70 words in total. " +
-            "If you are not sure, give the most likely answer and say how sure you are.";
+            "Line 2: one sentence saying what it is. " +
+            "Then 2 to 4 sections that fit this object best, chosen from: Key facts, Specs, Price, How to use, Tips, Care, " +
+            "Safety, History, Fun fact. Each section starts with a line \"## <section name>\" followed by 1 to 3 lines, " +
+            "each starting with \"• \". Prefer concrete, specific facts (numbers, materials, model or year, prices with currency) " +
+            "over generic statements, and only what is useful to someone looking at it right now. 120 to 180 words in total. " +
+            "If you are not sure what it is, give the most likely answer and say how sure you are in line 2.";
 
         [Header("Gemini")]
         [SerializeField] private string m_model = "gemini-3.5-flash-lite";
@@ -52,10 +55,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [Tooltip("Distance used for the reticle and the image crop when the depth sensor sees nothing (sky, far away).")]
         [SerializeField] private float m_noDepthDistance = 15f;
 
-        [Header("Answers")]
-        [Tooltip("The panel hides after looking this many degrees away from it for a few seconds.")]
-        [SerializeField] private float m_hidePanelAngle = 50f;
-
         private PassthroughCameraAccess m_camera;
         private SentisInferenceUiManager m_uiInference;
         private EnvironmentRayCastSampleManager m_raycast;
@@ -67,7 +66,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Vector3 m_dwellDirection;
         private float m_dwellTime;
         private bool m_armed;
-        private float m_lookAwayTime;
         private float m_nextLookupTime;
         private bool m_busy;
         private int m_lookupId;
@@ -102,7 +100,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
 
-            UpdatePanelAutoHide();
+            // While the info card is open, the reticle is hidden and no new lookups start; B or a middle finger pinch closes it
+            if (m_view.PanelVisible)
+            {
+                if (ClassFilterMenu.IsOpen || (!ClassFilterMenu.BlocksInput && InputManager.IsButtonBDownOrMiddleFingerPinchStarted()))
+                {
+                    ClosePanel();
+                }
+                m_view.SetReticleVisible(false);
+                m_dwellTime = 0f;
+                return;
+            }
 
             if (!m_camera.IsPlaying || m_isPaused() || ClassFilterMenu.IsOpen)
             {
@@ -128,8 +136,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 m_dwellTime += Time.deltaTime;
             }
-            // Reading the answer panel is not looking at an object
-            var canDwell = m_armed && !m_busy && !m_view.IsLookedAt(ray);
+            var canDwell = m_armed && !m_busy;
             var fill = canDwell ? Mathf.Clamp01((m_dwellTime - m_ringDelay) / Mathf.Max(0.01f, m_dwellSeconds - m_ringDelay)) : 0f;
             m_view.UpdateReticle(Vector3.Distance(ray.origin, target), fill, m_busy);
 
@@ -143,18 +150,20 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
         }
 
-        private void UpdatePanelAutoHide()
+        /// <summary>Closes the card and drops the answer still coming in. The head has to move before the next dwell lookup.</summary>
+        private void ClosePanel()
         {
-            if (!m_view.PanelVisible)
+            m_lookupId++;
+            m_gemini.Cancel();
+            if (m_lookup != null)
             {
-                return;
+                StopCoroutine(m_lookup);
+                m_lookup = null;
             }
-            var lookingAway = Vector3.Angle(m_head.forward, m_view.PanelPosition - m_head.position) > m_hidePanelAngle;
-            m_lookAwayTime = lookingAway ? m_lookAwayTime + Time.deltaTime : 0f;
-            if (m_lookAwayTime > 2.5f)
-            {
-                m_view.HidePanel();
-            }
+            m_busy = false;
+            m_armed = false;
+            m_dwellTime = 0f;
+            m_view.HidePanel();
         }
 
         // No answer cache on purpose: the same spot can hold a different object a moment later (one is put down, another picked up)
@@ -165,7 +174,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
             m_nextLookupTime = Time.time + 1f;
-            m_lookAwayTime = 0f;
 
             m_lookupId++;
             m_gemini.Cancel();
@@ -175,7 +183,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 m_lookup = null;
             }
             m_busy = false;
-            m_view.ShowPanel(target);
+            m_view.ShowPanel();
 
             if (!m_gemini.HasKey)
             {
@@ -185,7 +193,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             var box = FindBoxAt(ray);
             var hint = box != null ? $"{box.ClassName} ({box.Score * 100f:0}%)" : null;
-            m_view.SetText(box != null ? $"{box.ClassName}?" : "Looking...", "Asking Gemini...");
+            m_view.SetWaiting(box != null ? $"{box.ClassName}?" : "Looking", "Asking Gemini");
             m_lookup = StartCoroutine(Lookup(m_lookupId, target, box, hint));
         }
 
@@ -239,15 +247,26 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 });
         }
 
-        /// <summary>First line becomes the title, the rest the body; markdown leftovers are cleaned up.</summary>
+        /// <summary>
+        /// Line 1 becomes the title, line 2 the summary, then "## Heading" sections with bullets.
+        /// Copes with stray markdown and with answers that don't follow the format.
+        /// </summary>
         private void ShowAnswer(string text, bool streaming)
         {
-            var lines = text.Replace("**", "").Replace("__", "").Replace("#", "").Split('\n');
+            // '<' would start a rich text tag in the body
+            var lines = text.Replace("**", "").Replace("__", "").Replace('<', '‹').Replace('>', '›').Split('\n');
             string title = null;
+            string summary = null;
             var body = new StringBuilder();
             foreach (var raw in lines)
             {
                 var line = raw.Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+                var isHeading = line.StartsWith("#");
+                line = line.TrimStart('#').Trim();
                 if (line.Length == 0)
                 {
                     continue;
@@ -257,9 +276,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     title = line;
                     continue;
                 }
+                if (isHeading)
+                {
+                    if (body.Length > 0)
+                    {
+                        _ = body.Append("\n\n");
+                    }
+                    _ = body.Append(ObjectInfoView.Heading(line.TrimEnd(':')));
+                    continue;
+                }
                 if (line.StartsWith("* ") || line.StartsWith("- "))
                 {
                     line = "• " + line.Substring(2);
+                }
+                if (summary == null && body.Length == 0 && !line.StartsWith("•"))
+                {
+                    summary = line;
+                    continue;
                 }
                 if (body.Length > 0)
                 {
@@ -267,7 +300,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 }
                 _ = body.Append(line);
             }
-            m_view.SetText(title ?? "...", body.Length > 0 ? body.ToString() : streaming ? "..." : "");
+            m_view.SetContent(title ?? "...", summary, body.Length > 0 ? body.ToString() : streaming ? "..." : "");
         }
 
         /// <summary>Smallest confirmed detection box the view ray goes through, or null.</summary>
