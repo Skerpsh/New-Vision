@@ -26,6 +26,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [SerializeField] private TextAsset m_labelsAsset;
         [SerializeField, Range(0, 1)] private float m_iouThreshold = 0.6f;
         [SerializeField, Range(0, 1)] private float m_scoreThreshold = 0.23f;
+        [Tooltip("Model layers sent to the GPU per frame (the starting value when Adaptive Layers is on). Spreading the network " +
+                 "over several frames keeps rendering smooth; 0 = the whole network in one frame (frames get dropped).")]
+        [SerializeField] private int m_layersPerFrame = 40;
+        [Tooltip("Finds the most layers per frame that still keep the full frame rate: fewer after a dropped frame, " +
+                 "a few more after each smooth inference. Follows thermal throttling and model switches by itself.")]
+        [SerializeField] private bool m_adaptiveLayers = true;
 
         [Header("UI display references")]
         [SerializeField] private SentisInferenceUiManager m_uiInference;
@@ -48,6 +54,16 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private RenderTexture m_letterboxTexture;
         private Material m_letterboxMaterial;
 
+        // Adaptive layers per frame
+        private const float MinLayersPerFrame = 8f;
+        private const float MaxLayersPerFrame = 2000f;
+        private const float LayersIncrease = 2f;
+        private const float LayersDecreaseFactor = 0.85f;
+        private float m_layerBudget;
+        private int m_droppedFrames;
+        private bool m_skipAdapt;
+        private float m_nextAdaptLogTime;
+
         private void Awake()
         {
             m_models = m_modelVariants != null && m_modelVariants.Length > 0 ? m_modelVariants : new[] { m_sentisModel };
@@ -62,6 +78,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             LoadModel(m_modelIndex);
 
             m_letterboxMaterial = new Material(Resources.Load<Shader>("NewVisionLetterbox"));
+            m_layerBudget = m_layersPerFrame > 0 ? m_layersPerFrame : MaxLayersPerFrame;
+        }
+
+        private void Update()
+        {
+            // A frame that took clearly longer than one display refresh was dropped
+            var refreshRate = OVRPlugin.systemDisplayFrequency;
+            var frameTime = 1f / (refreshRate > 1f ? refreshRate : 72f);
+            if (Time.unscaledDeltaTime > frameTime * 1.4f)
+            {
+                m_droppedFrames++;
+            }
         }
 
         private void LoadModel(int index)
@@ -107,6 +135,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             // Look at anything for 2 s (or pinch / pull a trigger) and Gemini tells what it is
             gameObject.AddComponent<ObjectInfoLookup>().Init(m_cameraAccess, m_uiInference, () => m_uiMenuManager.IsPaused);
+
+            // Higher CPU/GPU clocks: by default the headset keeps the GPU low while the network competes with rendering
+            OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
+            OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
 
             // Hide the boundary (Guardian) so you can walk around freely, e.g. outdoors. Works while passthrough is on;
             // needs 'Boundary Visibility Support' in the project config (New Vision > Apply App Settings).
@@ -202,6 +234,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 PlayerPrefs.SetString(ModelPrefsKey, m_models[m_modelIndex].name);
                 PlayerPrefs.Save();
                 m_uiInference.ClearAnnotations();
+                m_skipAdapt = true; // the first run of a new model hitches anyway
             }
 
             [DllImport("OVRPlugin", CallingConvention = CallingConvention.Cdecl)]
@@ -224,8 +257,27 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             using var input = new Tensor<float>(new TensorShape(1, 3, m_inputSize.y, m_inputSize.x));
             TextureConverter.ToTensor(m_letterboxTexture, input, textureTransform);
 
-            // Schedule all model layers
-            m_engine.Schedule(input);
+            // Schedule the model layers, a few per frame so rendering doesn't wait for the whole network
+            m_droppedFrames = 0;
+            var layersPerFrame = m_adaptiveLayers ? Mathf.RoundToInt(m_layerBudget) : m_layersPerFrame;
+            var frames = 1;
+            var layers = 0;
+            if (layersPerFrame <= 0)
+            {
+                m_engine.Schedule(input);
+            }
+            else
+            {
+                var schedule = m_engine.ScheduleIterable(input);
+                while (schedule.MoveNext())
+                {
+                    if (++layers % layersPerFrame == 0)
+                    {
+                        frames++;
+                        yield return null;
+                    }
+                }
+            }
 
             // Get the results. ReadbackAndCloneAsync waits for all layers to complete before returning the result.
             // All three readbacks are requested at once, so we wait for them together instead of one frame after another.
@@ -239,6 +291,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             using var boxes = boxesAwaiter.GetResult();
             using var classIDs = classIDsAwaiter.GetResult();
             using var scores = scoresAwaiter.GetResult();
+            AdaptLayersPerFrame(layers, Time.realtimeSinceStartup - inferenceStartTime);
             if (boxes.shape[0] == 0)
             {
                 yield break;
@@ -257,7 +310,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
 
             NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold, m_classFilter.EnabledClasses);
-            Debug.Log($"[NewVision] inference {m_models[m_modelIndex].name} {m_backend}: {(Time.realtimeSinceStartup - inferenceStartTime) * 1000f:F0} ms, {m_detections.Count} objects");
+            Debug.Log($"[NewVision] inference {m_models[m_modelIndex].name} {m_backend}: {(Time.realtimeSinceStartup - inferenceStartTime) * 1000f:F0} ms ({frames} frames x {layersPerFrame} layers), {m_detections.Count} objects");
 
             // Boxes are in letterboxed input pixels: map them back to the camera image, scaled to the input size
             for (var i = 0; i < m_detections.Count; i++)
@@ -279,6 +332,42 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             // Update UI.
             m_uiInference.DrawUIBoxes(m_detections, m_inputSize, cachedCameraPose);
+        }
+
+        /// <summary>
+        /// AIMD like TCP: a few more layers per frame after every smooth inference, 15 % fewer after one with a dropped frame.
+        /// Settles just below the most the GPU can take next to rendering.
+        /// </summary>
+        private void AdaptLayersPerFrame(int totalLayers, float seconds)
+        {
+            if (!m_adaptiveLayers)
+            {
+                return;
+            }
+            if (m_skipAdapt)
+            {
+                m_skipAdapt = false;
+                return;
+            }
+            var dropped = m_droppedFrames;
+            if (dropped > 0)
+            {
+                m_layerBudget *= LayersDecreaseFactor;
+            }
+            else
+            {
+                m_layerBudget += LayersIncrease;
+            }
+            // More than the whole network per frame makes no difference
+            var max = totalLayers > 0 ? Mathf.Min(MaxLayersPerFrame, totalLayers) : MaxLayersPerFrame;
+            m_layerBudget = Mathf.Clamp(m_layerBudget, MinLayersPerFrame, max);
+
+            if (Time.time >= m_nextAdaptLogTime)
+            {
+                m_nextAdaptLogTime = Time.time + 5f;
+                Debug.Log($"[NewVision] adaptive: {m_layerBudget:F0} layers/frame of {totalLayers}, " +
+                          $"last inference {seconds * 1000f:F0} ms, dropped frames {dropped}");
+            }
         }
 
         private static void NonMaxSuppression(List<(int classId, Vector4 boundingBox, float score)> outDetections, Tensor<float> boxes, Tensor<int> classIDs, Tensor<float> scores, float iouThreshold, float scoreThreshold, bool[] enabledClasses)
