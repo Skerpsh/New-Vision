@@ -1,0 +1,4 @@
+<linker>
+  <!-- Keep ZXing intact under IL2CPP managed code stripping -->
+  <assembly fullname="zxing" preserve="all" />
+</linker>

@@ -35,6 +35,13 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private static readonly Color TitleColor = new(0.55f, 1f, 0.6f);
         private const string HeadingColor = "#8FD9FF";
+        private const string WarningColor = "#FFB347";
+        private const float ImageMaxHeight = 300f;
+        public const string CloseHint = "B  or  pinch middle finger + thumb to close";
+
+        // Hint under the reticle (QR code seen), in reticle canvas units
+        private const float ChipOffset = 95f;
+        private const int ChipFontSize = 30;
 
         private Transform m_head;
         private RectTransform m_reticle;
@@ -49,6 +56,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Text m_summary;
         private Text m_body;
         private Text m_footer;
+        private LayoutElement m_imageSlot;
+        private RawImage m_image;
+        private RectTransform m_chip;
+        private Text m_chipText;
         private bool m_open;
         private float m_fade; // 0 hidden .. 1 fully shown
         private bool m_following;
@@ -139,8 +150,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         public void SetContent(string title, string summary, string body)
         {
             m_waitingText = null;
-            m_title.text = title;
-            m_summary.text = summary ?? "";
+            m_title.text = Escape(title);
+            m_summary.text = Escape(summary ?? "");
             m_summary.gameObject.SetActive(!string.IsNullOrEmpty(summary));
             m_body.text = body ?? "";
             m_body.gameObject.SetActive(!string.IsNullOrEmpty(body));
@@ -153,7 +164,46 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_waitingText = status;
         }
 
-        public static string Heading(string text) => $"<color={HeadingColor}><b>{text.ToUpperInvariant()}</b></color>";
+        public static string Heading(string text) => $"<color={HeadingColor}><b>{Escape(text.ToUpperInvariant())}</b></color>";
+
+        public static string Warning(string text) => $"<color={WarningColor}>!  {Escape(text)}</color>";
+
+        /// <summary>Makes text safe for the rich text body: '&lt;' would start a tag.</summary>
+        public static string Escape(string text) => text?.Replace('<', '‹').Replace('>', '›');
+
+        /// <summary>Picture under the title (link preview), null hides it. The card doesn't own the texture.</summary>
+        public void SetImage(Texture texture)
+        {
+            m_image.texture = texture;
+            var visible = texture != null && texture.width > 8 && texture.height > 8;
+            m_imageSlot.gameObject.SetActive(visible);
+            if (!visible)
+            {
+                return;
+            }
+            var maxWidth = CardWidth - 56f;
+            var height = Mathf.Min(ImageMaxHeight, maxWidth * texture.height / texture.width);
+            var width = height * texture.width / texture.height;
+            m_imageSlot.preferredHeight = height;
+            m_image.rectTransform.sizeDelta = new Vector2(width, height);
+        }
+
+        /// <summary>Small grey line at the bottom: which buttons / pinches do what.</summary>
+        public void SetFooter(string text) => m_footer.text = text ?? CloseHint;
+
+        /// <summary>Hint under the reticle, e.g. "Link · example.com"; null hides it.</summary>
+        public void SetChip(string text)
+        {
+            var visible = !string.IsNullOrEmpty(text);
+            if (m_chip.gameObject.activeSelf != visible)
+            {
+                m_chip.gameObject.SetActive(visible);
+            }
+            if (visible && m_chipText.text != text)
+            {
+                m_chipText.text = text;
+            }
+        }
 
         private void LateUpdate()
         {
@@ -239,6 +289,29 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_ring.fillOrigin = (int)Image.Origin360.Top;
             m_ring.fillClockwise = true;
             m_dot = CreateImage("Dot", m_reticle, CircleSprite(64, 0f), new Color(1f, 1f, 1f, 0.55f), ReticleUnits * DotRatio);
+
+            // Chip: rounded label that sizes itself to the text, hanging under the ring
+            var chipGo = new GameObject("Chip", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            chipGo.transform.SetParent(m_reticle, false);
+            m_chip = (RectTransform)chipGo.transform;
+            m_chip.anchoredPosition = new Vector2(0f, -ChipOffset);
+            m_chip.pivot = new Vector2(0.5f, 1f);
+            var chipBackground = chipGo.GetComponent<Image>();
+            chipBackground.sprite = RoundedRectSprite((int)CornerRadius);
+            chipBackground.type = Image.Type.Sliced;
+            chipBackground.pixelsPerUnitMultiplier = 1.6f;
+            chipBackground.color = new Color(0.04f, 0.06f, 0.08f, 0.7f);
+            chipBackground.raycastTarget = false;
+            var chipLayout = chipGo.GetComponent<HorizontalLayoutGroup>();
+            chipLayout.padding = new RectOffset(20, 20, 8, 10);
+            chipLayout.childControlWidth = true;
+            chipLayout.childControlHeight = true;
+            var chipFitter = chipGo.GetComponent<ContentSizeFitter>();
+            chipFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            chipFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            m_chipText = CreateText("Text", m_chip, ChipFontSize, FontStyle.Bold, TitleColor, TextAnchor.MiddleCenter);
+            m_chipText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            m_chip.gameObject.SetActive(false);
         }
 
         private void BuildCard()
@@ -272,12 +345,24 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             canvasGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             m_title = CreateText("Title", m_card, 32, FontStyle.Bold, TitleColor, TextAnchor.UpperLeft);
+
+            var slotGo = new GameObject("ImageSlot", typeof(RectTransform), typeof(LayoutElement));
+            slotGo.transform.SetParent(m_card, false);
+            m_imageSlot = slotGo.GetComponent<LayoutElement>();
+            var imageGo = new GameObject("Image", typeof(RectTransform), typeof(RawImage));
+            imageGo.transform.SetParent(slotGo.transform, false);
+            m_image = imageGo.GetComponent<RawImage>();
+            m_image.raycastTarget = false;
+            var imageRect = m_image.rectTransform;
+            imageRect.anchorMin = imageRect.anchorMax = new Vector2(0f, 0.5f); // left-aligned like the text
+            imageRect.pivot = new Vector2(0f, 0.5f);
+            slotGo.SetActive(false);
             m_summary = CreateText("Summary", m_card, 22, FontStyle.Italic, new Color(0.85f, 0.88f, 0.9f), TextAnchor.UpperLeft);
             m_body = CreateText("Body", m_card, 21, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
             m_body.supportRichText = true;
             m_body.lineSpacing = 1.12f;
             m_footer = CreateText("Footer", m_card, 16, FontStyle.Normal, new Color(1f, 1f, 1f, 0.45f), TextAnchor.UpperRight);
-            m_footer.text = "B  or  pinch middle finger + thumb to close";
+            m_footer.text = CloseHint;
         }
 
         private static Text CreateText(string name, Transform parent, int size, FontStyle style, Color color, TextAnchor alignment)
