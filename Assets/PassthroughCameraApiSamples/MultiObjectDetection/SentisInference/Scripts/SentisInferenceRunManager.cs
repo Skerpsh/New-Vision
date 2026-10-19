@@ -153,6 +153,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 {
                     yield return null;
                 }
+                // Detection pauses while the browser is open: no boxes over the page, and the GPU is free for scrolling
+                if (BrowserPanel.IsOpen)
+                {
+                    m_uiInference.ClearAnnotations();
+                    while (BrowserPanel.IsOpen)
+                    {
+                        yield return null;
+                    }
+                }
                 yield return RunInference();
             }
         }

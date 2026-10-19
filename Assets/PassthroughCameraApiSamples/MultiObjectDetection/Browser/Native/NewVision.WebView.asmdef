@@ -1,0 +1,14 @@
+{
+    "name": "NewVision.WebView",
+    "rootNamespace": "PassthroughCameraSamples.MultiObjectDetection",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

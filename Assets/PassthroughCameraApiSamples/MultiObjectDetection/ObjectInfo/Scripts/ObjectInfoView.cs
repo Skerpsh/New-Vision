@@ -424,7 +424,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         }
 
         /// <summary>White rounded rectangle for a 9-sliced background: corners of the given radius, stretchable middle.</summary>
-        private static Sprite RoundedRectSprite(int radius)
+        internal static Sprite RoundedRectSprite(int radius)
         {
             var size = radius * 2 + 2;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)

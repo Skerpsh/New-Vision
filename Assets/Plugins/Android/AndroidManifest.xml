@@ -21,4 +21,9 @@
   <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
   <!-- Object info lookup (Gemini API) -->
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- In-app browser: Quest system keyboard for text fields (also set in OculusProjectConfig) -->
+  <uses-feature android:name="oculus.software.overlay_keyboard" android:required="false" />
+  <!-- Wi-Fi from QR codes: suggest the network to the system (WifiManager.addNetworkSuggestions) -->
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 </manifest>

@@ -73,6 +73,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         // QR codes / barcodes and the action of the open card (A / index pinch)
         private CodeScanner m_scanner;
+        private BrowserPanel m_browser;
         private Coroutine m_preview;
         private Texture2D m_previewImage;
         private Action m_primaryAction;
@@ -101,6 +102,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             m_scanner = gameObject.AddComponent<CodeScanner>();
             m_scanner.Init(m_camera);
+
+            var browserGo = new GameObject("Browser");
+            browserGo.transform.SetParent(transform, false);
+            m_browser = browserGo.AddComponent<BrowserPanel>();
+            m_browser.Init(m_head, cameraRig != null ? cameraRig.trackingSpace : null);
         }
 
         private void OnDestroy()
@@ -113,6 +119,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         {
             if (m_view == null || m_head == null)
             {
+                return;
+            }
+
+            // The browser has the input to itself
+            if (BrowserPanel.IsOpen)
+            {
+                m_view.SetReticleVisible(false);
+                m_dwellTime = 0f;
+                m_armed = false;
                 return;
             }
 
@@ -316,7 +331,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 _ = body.Insert(0, ObjectInfoView.Heading(site + target.Host) + "\n");
             }
             m_view.SetContent(title, summary, body.ToString());
-            SetAction("open in browser", () => Application.OpenURL(target.AbsoluteUri));
+            SetAction("open", () =>
+            {
+                ClosePanel();
+                m_browser.Open(target.AbsoluteUri);
+            });
         }
 
         private IEnumerator PreviewLink(int id, Uri url)
@@ -369,11 +388,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 _ = body.Append("\n\n").Append(ObjectInfoView.Heading(status));
             }
             m_view.SetContent(wifi.WifiSsid.Length > 0 ? wifi.WifiSsid : "Wi-Fi network", "Wi-Fi network", body.ToString());
-            SetAction("connect", () =>
+            if (status == null)
             {
-                _ = WifiConnector.Connect(wifi, out var message);
-                ShowWifi(wifi, message);
-            });
+                SetAction("connect", () =>
+                {
+                    var suggested = WifiConnector.Suggest(wifi, out var message);
+                    ShowWifi(wifi, message);
+                    if (!suggested)
+                    {
+                        // Nothing else to try from the app: straight to Settings with the password on the clipboard
+                        ShowWifi(wifi, WifiConnector.OpenSettings(wifi));
+                    }
+                });
+            }
+            else
+            {
+                SetAction("open Wi-Fi settings", () => ShowWifi(wifi, WifiConnector.OpenSettings(wifi)));
+            }
         }
 
         // No answer cache on purpose: the same spot can hold a different object a moment later (one is put down, another picked up)

@@ -7,14 +7,19 @@ using UnityEngine;
 namespace PassthroughCameraSamples.MultiObjectDetection
 {
     /// <summary>
-    /// Adds a Wi-Fi network from a QR code. Android 11+ doesn't let apps join networks silently: the system shows its
-    /// "Save network?" dialog (Settings.ACTION_WIFI_ADD_NETWORKS) and the user confirms. Falls back to the Wi-Fi settings.
+    /// Adds a Wi-Fi network from a QR code. Android 10+ doesn't let apps join networks silently. Horizon OS ignores the
+    /// "Save network?" dialog (ACTION_WIFI_ADD_NETWORKS just opens Settings), so the network is handed to the system as a
+    /// suggestion (WifiManager.addNetworkSuggestions): the headset joins it by itself when it is in range, after the user
+    /// allows it once. Wi-Fi settings with the password on the clipboard are the fallback.
     /// </summary>
     public static class WifiConnector
     {
-        public enum Outcome { DialogShown, SettingsOpened, Failed }
+        // WifiManager.STATUS_NETWORK_SUGGESTIONS_*
+        private const int StatusSuccess = 0;
+        private const int StatusDuplicate = 3;
 
-        public static Outcome Connect(CodeContent wifi, out string message)
+        /// <summary>Suggests the network to the system. Returns false when that isn't possible (then use <see cref="OpenSettings"/>).</summary>
+        public static bool Suggest(CodeContent wifi, out string message)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
@@ -32,8 +37,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 }
                 else if (security.Length > 0)
                 {
-                    // WEP and enterprise networks can't be suggested by apps
-                    throw new NotSupportedException($"{security} networks can't be added by apps");
+                    message = $"{security} networks can't be added by apps";
+                    return false;
                 }
                 if (wifi.WifiHidden)
                 {
@@ -42,41 +47,63 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 using var suggestion = builder.Call<AndroidJavaObject>("build");
                 using var list = new AndroidJavaObject("java.util.ArrayList");
                 _ = list.Call<bool>("add", suggestion);
-                using var intent = new AndroidJavaObject("android.content.Intent", "android.settings.WIFI_ADD_NETWORKS");
-                Chain(intent.Call<AndroidJavaObject>("putParcelableArrayListExtra", "android.provider.extra.WIFI_NETWORK_LIST", list));
-                StartActivity(intent);
-                message = "Confirm in the system dialog";
-                return Outcome.DialogShown;
+
+                using var activity = CurrentActivity();
+                using var wifiManager = activity.Call<AndroidJavaObject>("getSystemService", "wifi");
+                var status = wifiManager.Call<int>("addNetworkSuggestions", list);
+                Debug.Log($"[NewVision] Wi-Fi suggestion status {status}");
+                if (status == StatusSuccess || status == StatusDuplicate)
+                {
+                    message = "Saved. The headset joins it by itself when it's in range. If a notification asks, allow it";
+                    return true;
+                }
+                message = $"The system refused the network (status {status})";
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[NewVision] Wi-Fi add dialog failed: {e.Message}");
+                Debug.LogWarning($"[NewVision] Wi-Fi suggestion failed: {e.Message}");
+                message = "Can't add the network from the app";
             }
+            return false;
+#else
+            message = "Only works on the headset";
+            return false;
+#endif
+        }
+
+        /// <summary>Opens Wi-Fi settings with the password on the clipboard, ready to paste.</summary>
+        public static string OpenSettings(CodeContent wifi)
+        {
+            var copied = false;
+            if (!string.IsNullOrEmpty(wifi.WifiPassword))
+            {
+                GUIUtility.systemCopyBuffer = wifi.WifiPassword;
+                copied = true;
+            }
+#if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using var intent = new AndroidJavaObject("android.content.Intent", "android.settings.WIFI_SETTINGS");
-                StartActivity(intent);
-                message = "Pick the network in Wi-Fi settings and enter the password shown here";
-                return Outcome.SettingsOpened;
+                using var activity = CurrentActivity();
+                activity.Call("startActivity", intent);
+                return copied ? "Password copied: pick the network in Settings and paste it" : "Pick the network in Settings";
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[NewVision] Wi-Fi settings failed: {e.Message}");
             }
 #endif
-            message = "Can't open Wi-Fi settings, connect manually with the password shown here";
-            return Outcome.Failed;
+            return copied ? "Password copied, connect in Settings > Wi-Fi" : "Connect in Settings > Wi-Fi";
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         // Builder methods return the builder itself; the returned reference only needs releasing
         private static void Chain(AndroidJavaObject result) => result?.Dispose();
 
-        private static void StartActivity(AndroidJavaObject intent)
+        private static AndroidJavaObject CurrentActivity()
         {
             using var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            using var activity = player.GetStatic<AndroidJavaObject>("currentActivity");
-            activity.Call("startActivity", intent);
+            return player.GetStatic<AndroidJavaObject>("currentActivity");
         }
 #endif
     }
