@@ -29,3 +29,6 @@ __pycache__/
 
 # Gemini API key (lives only on the headset / your PC, never in git)
 gemini_api_key.txt
+
+# Capri artwork belongs to its rights holders (see capri-desktop README): local only, never in git
+Assets/PassthroughCameraApiSamples/MultiObjectDetection/Companion/Resources/CapriCutout.bytes*

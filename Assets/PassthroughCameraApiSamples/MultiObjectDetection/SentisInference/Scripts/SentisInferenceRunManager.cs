@@ -141,6 +141,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Look at anything for 2 s (or pinch / pull a trigger) and Gemini tells what it is
             gameObject.AddComponent<ObjectInfoLookup>().Init(m_cameraAccess, m_uiInference, () => m_uiMenuManager.IsPaused);
 
+            // Capri floating in the room (off when her picture isn't in Companion/Resources, it's not in git)
+            gameObject.AddComponent<CompanionController>();
+
             // Higher CPU/GPU clocks: by default the headset keeps the GPU low while the network competes with rendering
             OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
             OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
