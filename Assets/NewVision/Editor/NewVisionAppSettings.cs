@@ -60,7 +60,7 @@ namespace NewVision.Editor
         {
             // Every ONNX model in the folder (e.g. yolo11n_320.onnx, yolo11s_416.onnx, a custom-trained one),
             // except the original sample model. Models must output (1, 4 + classes, N) like Ultralytics YOLO exports
-            // and use the same classes as the labels file.
+            // and their classes must be the first lines of the labels file (COCO: 80, YOLO-World: all of them).
             var onnxPaths = AssetDatabase.FindAssets("t:ModelAsset", new[] { ModelFolder })
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(p => p.EndsWith(".onnx") && !p.EndsWith(ExcludedSampleModel))

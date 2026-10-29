@@ -106,6 +106,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private static string ModelDisplayName(ModelAsset model)
         {
             // yolo11n_320 -> "YOLO11n 320 (fast)", yolo12s_416 -> "YOLO12s 416 (accurate)", my_model -> "my model"
+            if (model.name.StartsWith("yoloworld_"))
+            {
+                // yoloworld_s_416 -> "YOLO-World s 416 (+ extra classes)"
+                return $"YOLO-World {model.name.Substring("yoloworld_".Length).Replace('_', ' ')} (+ extra classes)";
+            }
             var name = model.name.Replace("yolo", "YOLO").Replace('_', ' ');
             var size = System.Text.RegularExpressions.Regex.Match(model.name, @"^yolo\d+([nsmlx])").Groups[1].Value;
             return size switch

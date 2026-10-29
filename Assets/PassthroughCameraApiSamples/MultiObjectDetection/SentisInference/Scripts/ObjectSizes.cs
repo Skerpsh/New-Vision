@@ -43,6 +43,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Indoor
             { "Book", 0.24f }, { "Clock", 0.3f }, { "Vase", 0.3f }, { "Scissors", 0.2f }, { "Teddy bear", 0.35f },
             { "Hair drier", 0.25f }, { "Toothbrush", 0.19f },
+            // Extra classes of open-vocabulary models (YOLO-World), after the 80 COCO ones
+            { "Vape", 0.1f },
         };
 
         /// <summary>Typical height in meters, or null if unknown.</summary>

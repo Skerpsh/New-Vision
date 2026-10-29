@@ -123,9 +123,12 @@ MonoBehaviour:
   - {fileID: 5022602860645237092, guid: 079c619b5d5a65b498ac2d3bf0880352, type: 3}
   - {fileID: 5022602860645237092, guid: ce634c407dd2572499e4775e419d6023, type: 3}
   - {fileID: 5022602860645237092, guid: 3ce3dae3a4995de4c937832b1f90f47a, type: 3}
+  - {fileID: 5022602860645237092, guid: b50899afb35a18c4fb85b7611d67520e, type: 3}
   m_labelsAsset: {fileID: 4900000, guid: c01c64149c7930b45a76559caabd5c78, type: 3}
   m_iouThreshold: 0.4
   m_scoreThreshold: 0.3
+  m_layersPerFrame: 40
+  m_adaptiveLayers: 1
   m_uiInference: {fileID: 2184060436030677583}
   OnnxModel: {fileID: 0}
 --- !u!114 &2184060436030677583
@@ -148,6 +151,8 @@ MonoBehaviour:
   m_labelScalePerMeter: 0.0002
   m_hitsToConfirm: 3
   m_maxGapBetweenHits: 0.4
+  m_maxVisibleBoxes: 3
+  m_visibleScoreBonus: 0.05
   m_minSizeRatio: 0.3
   m_maxSizeRatio: 3
   m_maxEstimatedDistance: 60
