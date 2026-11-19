@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { width: 1600px; height: 600px; position: relative; }
+  .frame { position: absolute; inset: 22px; --c: 34px; }
+  .frame .inner { position: absolute; inset: 0; padding: 48px 64px; }
+
+  .header { display: flex; align-items: center; gap: 14px; font-size: 22px; }
+  .num { --c: 8px; background: var(--accent); color: #000; padding: 4px 12px; }
+  .brand { color: var(--dim); font-size: 18px; letter-spacing: 2px; }
+  .hline { position: absolute; left: 64px; right: 64px; top: 100px; height: 2px; background: var(--dim); }
+  .hline::before { content: ""; position: absolute; left: 0; width: 220px; height: 2px; background: var(--accent); }
+
+  .title { position: absolute; left: 60px; top: 150px; font-size: 150px; line-height: 1; letter-spacing: 6px; color: var(--accent); }
+  .title span { position: absolute; left: 0; top: 0; mix-blend-mode: screen; }
+  .title .cy { color: var(--cyan); transform: translate(-6px, 3px); opacity: .55; clip-path: inset(18% 0 58% 0); }
+  .title .mg { color: var(--magenta); transform: translate(7px, -2px); opacity: .55; clip-path: inset(70% 0 12% 0); }
+  .title .tear { color: var(--accent); transform: translateX(26px); clip-path: inset(44% 0 47% 0); }
+
+  .sub { position: absolute; left: 66px; top: 322px; font-size: 26px; color: var(--text); letter-spacing: 2px; }
+  .sub b { color: var(--accent); font-weight: normal; }
+  .tags { position: absolute; left: 66px; top: 390px; display: flex; gap: 14px; }
+  .tags .tag { font-size: 20px; }
+  .tags .tag.ghost { background: transparent; color: var(--accent); outline: 2px solid var(--dim); outline-offset: -2px; clip-path: none; }
+  .ticker { position: absolute; left: 66px; right: 64px; bottom: 44px; font-size: 18px; color: var(--muted); letter-spacing: 2px; white-space: nowrap; overflow: hidden; }
+
+  /* right side: a small HUD scene */
+  .scene { position: absolute; right: 50px; top: 120px; width: 600px; height: 380px; }
+  .laptop { position: absolute; left: 150px; top: 120px; width: 250px; height: 170px; }
+  .laptop .screen { position: absolute; left: 20px; top: 0; width: 210px; height: 130px; border: 3px solid var(--muted); border-radius: 6px; background: linear-gradient(160deg, #1a1206, #050507); }
+  .laptop .screen::after { content: ""; position: absolute; inset: 14px 18px auto 18px; height: 70px;
+    background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--muted) 45%, transparent) 0 3px, transparent 3px 12px); }
+  .laptop .base { position: absolute; left: 0; top: 133px; width: 250px; height: 14px; border: 3px solid var(--muted); border-radius: 0 0 10px 10px; }
+  .box { left: 132px; top: 100px; width: 288px; height: 214px; }
+  .box-tag { position: absolute; left: 132px; top: 58px; }
+  .reticle { left: 258px; top: 172px; width: 34px; height: 34px; --l: 10px; --t: 3px; }
+  .reticle::after { border: none; }
+  .dot { position: absolute; left: 270px; top: 184px; width: 10px; height: 10px; background: var(--accent); }
+  .meter { position: absolute; left: 252px; top: 214px; width: 46px; height: 5px; background: var(--dim); }
+  .meter::before { content: ""; position: absolute; inset: 0 40% 0 0; background: var(--accent); }
+  .hint { position: absolute; left: 112px; top: 330px; font-size: 17px; }
+
+  /* the wrist panel, small, lower left of the scene */
+  .mini { position: absolute; left: 445px; top: 150px; width: 130px; height: 130px; --c: 12px; transform: rotate(-8deg); }
+  .mini .t { position: absolute; left: 10px; top: 10px; font-size: 11px; background: var(--accent); color: #000; padding: 2px 6px; }
+  .mini .g { position: absolute; left: 10px; top: 36px; right: 10px; bottom: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .mini .g i { display: block; border: 1px solid var(--dim); position: relative; }
+  .mini .g i::after { content: ""; position: absolute; left: 4px; bottom: 5px; width: 50%; height: 4px; background: var(--accent); }
+  .mini .g i.off::after { background: var(--muted); }
+</style>
+</head>
+<body class="scan">
+  <div class="frame chamfer outline">
+    <div class="inner">
+      <div class="header"><span class="num chamfer">01</span><span style="color:var(--accent)">HOME</span><span class="brand">//NEW VISION</span></div>
+    </div>
+  </div>
+  <div class="hline"></div>
+
+  <div class="title">NEW VISION<span class="cy">NEW VISION</span><span class="mg">NEW VISION</span><span class="tear">NEW VISION</span></div>
+  <div class="sub">MIXED REALITY HUD <b>//</b> META QUEST 3 <b>+</b> M5STICKC PLUS2</div>
+  <div class="tags">
+    <span class="tag">YOLO ON DEVICE</span>
+    <span class="tag">GEMINI</span>
+    <span class="tag ghost">WRIST PANEL</span>
+    <span class="tag ghost">OBJECT MEMORY</span>
+    <span class="tag ghost">HANDS ONLY</span>
+  </div>
+  <div class="ticker">LAST EXPLORER // QUEST LINK // LAPTOP LINK // FX HIGH // ORANGE // YOLO 96MS // 72 FPS // FIND LAPTOP 2.4M //</div>
+
+  <div class="scene">
+    <div class="laptop"><div class="screen"></div><div class="base"></div></div>
+    <div class="brackets box"></div>
+    <div class="box-tag"><span class="tag">LAPTOP 91</span></div>
+    <div class="brackets reticle"></div>
+    <div class="dot"></div>
+    <div class="meter"></div>
+    <div class="hint tag">TAP: EXPLORER // SWIPE L: CLOSE</div>
+    <div class="mini chamfer outline">
+      <span class="t">01 GENERAL</span>
+      <div class="g"><i></i><i></i><i class="off"></i><i></i><i class="off"></i><i></i><i></i><i></i><i class="off"></i></div>
+    </div>
+  </div>
+
+  <!-- torn-screen fragments -->
+  <div class="frag c" style="left:520px; top:236px; width:180px"></div>
+  <div class="frag m" style="left:80px; top:290px; width:120px"></div>
+  <div class="frag a" style="left:860px; top:132px; width:240px; height:2px"></div>
+  <div class="frag w" style="left:1180px; top:520px; width:90px; height:2px"></div>
+  <div class="frag c" style="left:1320px; top:110px; width:60px"></div>
+  <div class="frag m" style="left:640px; top:470px; width:200px; height:2px"></div>
+  <div style="position:absolute; left:1012px; top:60px; width:2px; height:480px; background:var(--cyan); opacity:.35"></div>
+</body>
+</html>

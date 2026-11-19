@@ -1,0 +1,12 @@
+Library/
+Temp/
+Logs/
+Builds/
+obj/
+Packages/
+ProjectSettings/
+graphify-out/
+*.vlw
+*.sentis
+*.onnx
+

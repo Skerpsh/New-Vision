@@ -1,0 +1,79 @@
+/* New Vision cyberdeck look for README art (same palette as NvStyle / the stick firmware).
+   Rendered to PNG with: msedge --headless=new --screenshot=out.png --window-size=W,H file.html */
+@font-face {
+  font-family: "Tektur";
+  src: url("../../Assets/NewVision/Resources/NewVision/Tektur.ttf");
+}
+
+:root {
+  --bg: #050507;
+  --accent: #ff9c00;
+  --dim: #694000;
+  --panel: #1f1300;
+  --muted: #ae8648;
+  --text: #fff0d9;
+  --scan: #120b00;
+  --green: #39ff14;
+  --cyan: #00e5ff;
+  --magenta: #ff00c8;
+  --yellow: #ffe400;
+  --red: #ff2038;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Tektur", sans-serif;
+  overflow: hidden;
+}
+
+/* black glass with scanlines */
+.scan {
+  background:
+    repeating-linear-gradient(to bottom, var(--scan) 0 2px, transparent 2px 6px),
+    radial-gradient(ellipse at 30% 20%, #140c02 0%, var(--bg) 70%);
+}
+
+/* the cut-corner shape everything is made of: top-left and bottom-right corners cut */
+.chamfer { --c: 18px; clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
+
+/* outline version: a filled chamfer with a slightly smaller inner chamfer on top */
+.outline { position: relative; background: var(--dim); }
+.outline::before {
+  content: ""; position: absolute; inset: 2px; background: var(--bg);
+  clip-path: inherit;
+}
+.outline > * { position: relative; }
+
+/* HUD corner marks */
+.brackets { position: absolute; --l: 26px; --t: 4px; --col: var(--accent); }
+.brackets::before, .brackets::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(var(--col), var(--col)) top left / var(--l) var(--t),
+    linear-gradient(var(--col), var(--col)) top left / var(--t) var(--l),
+    linear-gradient(var(--col), var(--col)) top right / var(--l) var(--t),
+    linear-gradient(var(--col), var(--col)) top right / var(--t) var(--l),
+    linear-gradient(var(--col), var(--col)) bottom left / var(--l) var(--t),
+    linear-gradient(var(--col), var(--col)) bottom left / var(--t) var(--l),
+    linear-gradient(var(--col), var(--col)) bottom right / var(--l) var(--t),
+    linear-gradient(var(--col), var(--col)) bottom right / var(--t) var(--l);
+  background-repeat: no-repeat;
+}
+.brackets::after { inset: 0; background: none; border: 1px solid color-mix(in srgb, var(--col) 30%, transparent); }
+
+/* accent tag with black text (detection labels, chips) */
+.tag {
+  --c: 10px; display: inline-block; background: var(--accent); color: #000;
+  padding: 6px 16px 5px 14px; font-size: 22px; letter-spacing: 1px;
+  clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c));
+}
+
+/* torn-screen glitch fragments */
+.frag { position: absolute; height: 3px; }
+.frag.c { background: var(--cyan); }
+.frag.m { background: var(--magenta); }
+.frag.a { background: var(--accent); }
+.frag.w { background: #fff; }

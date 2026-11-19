@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { width: 1600px; height: 560px; position: relative; }
+  /* the M5StickC Plus2 body (orange case like the Vartovyi photo), screen to the left of the M5 button */
+  .stick { position: absolute; top: 70px; width: 740px; height: 420px; border-radius: 34px;
+    background: linear-gradient(170deg, #e6a21c, #b8770a); box-shadow: 0 30px 60px rgba(0,0,0,.6), inset 0 2px 0 #ffd27a; }
+  .stick .bezel { position: absolute; left: 34px; top: 52px; width: 548px; height: 316px; border-radius: 10px; background: #0b0b0d; }
+  .stick .m5 { position: absolute; right: 30px; top: 110px; width: 90px; height: 200px; border-radius: 14px;
+    border: 3px solid #a86c06; color: #a86c06; font-size: 46px; display: flex; align-items: center; justify-content: center;
+    writing-mode: vertical-rl; letter-spacing: -2px; font-weight: bold; }
+  .label { position: absolute; top: 20px; font-size: 22px; color: var(--muted); letter-spacing: 2px; }
+  .label b { color: var(--accent); font-weight: normal; }
+
+  /* the screen, in the firmware's own pixels (240 x 135), scaled up */
+  .screen { position: absolute; left: 4px; top: 6px; width: 240px; height: 135px; transform-origin: 0 0; transform: scale(2.25);
+    background: repeating-linear-gradient(to bottom, #050507 0 1px, var(--scan) 1px 2px, #050507 2px 3px); overflow: hidden; }
+  .s { position: absolute; white-space: nowrap; line-height: 1; }
+  .t11 { font-size: 10px; } .t14 { font-size: 13px; }
+  .tagc { --c: 4px; background: var(--accent); color: #000; }
+  .pill { --c: 3px; height: 13px; background: var(--green); }
+  .pill::before { content: ""; position: absolute; inset: 1px; background: #050507; clip-path: inherit; }
+  .pill i { position: absolute; left: 5px; top: 4px; width: 5px; height: 5px; background: var(--green); }
+  .pill b { position: absolute; left: 14px; top: 2px; font-size: 10px; color: var(--green); font-weight: normal; }
+  .br { position: absolute; --l: 7px; --t: 1px; --col: var(--dim); }
+</style>
+</head>
+<body class="scan">
+<div class="label" style="left:40px"><b>HOME</b> // OUTWARD-FACING HUD</div>
+<div class="label" style="left:830px"><b>DEBUG</b> // EVERY EVENT</div>
+
+<div class="stick" style="left:40px"><div class="bezel"><div class="screen" id="home"></div></div><div class="m5">M5</div></div>
+<div class="stick" style="left:830px"><div class="bezel"><div class="screen" id="debug"></div></div><div class="m5">M5</div></div>
+
+<script>
+function s(parent, cls, css, html) {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {});
+  if (html !== undefined) d.innerHTML = html; parent.appendChild(d); return d;
+}
+// header: [clock] //NEW VISION ...... link battery   (HOME); [02] DEBUG on the debug page
+function header(scr, tag, name) {
+  const t = s(scr, "s tagc chamfer t14", { left: "0", top: "0", height: "15px", padding: "1px 6px 0 6px", lineHeight: "14px" }, tag);
+  const x = tag.length > 2 ? 52 : 33;
+  if (name) s(scr, "s t14", { left: x + "px", top: "2px", color: "var(--accent)" }, name);
+  s(scr, "s t11", { left: (name ? x + 48 : x) + "px", top: "3px", color: "var(--dim)" }, "//NEW VISION");
+  s(scr, "s", { left: "155px", top: "4px", width: "7px", height: "7px", background: "var(--green)" });
+  s(scr, "s t14", { left: "180px", top: "2px", color: "var(--text)", textAlign: "right", width: "32px", fontSize: "11px" }, "+71%");
+  for (let i = 0; i < 5; i++) s(scr, "s", { left: (215 + i * 5) + "px", top: "3px", width: "4px", height: "9px", background: i < 4 ? "var(--accent)" : "var(--dim)" });
+  s(scr, "s", { left: "0", top: "16px", width: "240px", height: "1px", background: "var(--dim)" });
+  s(scr, "s", { left: "0", top: "16px", width: "60px", height: "1px", background: "var(--accent)" });
+}
+
+// HOME: 7 log rows in brackets, newest in accent at the bottom; pills; ticker
+const home = document.getElementById("home");
+header(home, "18:20");
+s(home, "br brackets", { left: "2px", top: "19px", width: "236px", height: "88px" });
+const log = ["18:14:02 BLE ADVERTISING", "18:14:05 LAPTOP CONNECTED", "18:14:09 QUEST CONNECTED", "18:14:09 TIME SYNCED",
+             "18:16:40 CMD EXPLORER -> LAPTOP", "18:19:12 BEEP", "18:20:31 FOUND LAPTOP"];
+log.forEach((line, i) => {
+  const y = 22 + i * 12, newest = i === log.length - 1;
+  if (newest) s(home, "s", { left: "6px", top: (y + 1) + "px", width: "3px", height: "9px", background: "var(--accent)" });
+  s(home, "s t11", { left: "13px", top: (y + 1) + "px", color: newest ? "var(--accent)" : i >= 4 ? "var(--text)" : "var(--muted)" }, line);
+});
+[["QUEST", 4], ["LAPTOP", 122]].forEach(([t, x]) => { const p = s(home, "s pill chamfer", { left: x + "px", top: "107px", width: "114px" }); s(p, "", null, "<i></i><b>" + t + "</b>"); });
+s(home, "s t11", { left: "-30px", top: "123px", color: "var(--muted)" }, "LAST FOUND LAPTOP  //  BAT 71%  //  FX HIGH  //  ORANGE  //  UP 6M  //  LAST");
+// a little Impact FX on the HOME screen: the head shook
+s(home, "frag c", { left: "40px", top: "60px", width: "70px", height: "2px" });
+s(home, "frag m", { left: "150px", top: "88px", width: "50px", height: "1px" });
+s(home, "s", { left: "196px", top: "18px", width: "1px", height: "88px", background: "var(--magenta)", opacity: ".6" });
+
+// DEBUG: every event, firmware and link numbers at the bottom
+const debug = document.getElementById("debug");
+header(debug, "02", "DEBUG");
+["18:14:02 nv-stick 5 boot", "18:14:02 ble advertising", "18:14:05 laptop connected", "18:14:09 quest connected",
+ "18:14:09 quest talking", "18:14:09 time synced", "18:16:40 cmd explorer -> laptop", "18:20:31 FOUND LAPTOP"]
+  .forEach((line, i) => s(debug, "s t11", { left: "4px", top: (20 + i * 11) + "px", color: "var(--text)" }, line));
+s(debug, "s", { left: "0", top: "117px", width: "240px", height: "1px", background: "var(--dim)" });
+s(debug, "s t11", { left: "4px", top: "121px", color: "var(--muted)" }, "nv-stick 5  //  CONN 2  //  MSG 1406  //  HEAP 186K");
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { width: 1600px; height: 760px; position: relative; }
+  /* one panel = 600 x 600 canvas units, like WristPanel.cs; drawn at 0.8 */
+  .panel { position: absolute; top: 110px; width: 600px; height: 600px; transform-origin: 0 0; transform: scale(.8); --c: 26px; }
+  .panel .bg { position: absolute; inset: 0; background: var(--dim); }
+  .panel .bg::before { content: ""; position: absolute; inset: 2px; clip-path: inherit;
+    background: repeating-linear-gradient(to bottom, var(--scan) 0 2px, rgba(5,5,7,.92) 2px 6px); }
+  .abs { position: absolute; }
+  .tab { --c: 8px; display: flex; align-items: center; justify-content: center; font-size: 22px; height: 40px; top: 14px; }
+  .tab.on { background: var(--accent); color: #000; }
+  .tab.off { background: var(--dim); color: var(--text); }
+  .tab.off::before { content: ""; position: absolute; inset: 2px; background: var(--bg); clip-path: inherit; }
+  .tab span { position: relative; }
+  .line { left: 0; top: 60px; width: 600px; height: 2px; background: var(--dim); }
+  .mark { top: 60px; width: 120px; height: 2px; background: var(--accent); }
+  .seg { top: 24px; width: 7px; height: 20px; background: var(--dim); }
+  .tile { --c: 14px; background: var(--dim); }
+  .tile.hover { background: var(--accent); }
+  .tile.danger { background: color-mix(in srgb, var(--red) 45%, transparent); }
+  .tile::before { content: ""; position: absolute; inset: 2px; background: var(--bg); clip-path: inherit; }
+  .tile.fill::before { background: var(--accent); }
+  .tile .cap { position: absolute; left: 14px; top: 10px; font-size: 17px; color: var(--muted); }
+  .tile .val { position: absolute; left: 14px; bottom: 10px; font-size: 30px; color: var(--accent); white-space: nowrap; }
+  .tile .val.off { color: var(--muted); }
+  .tile .val.red { color: var(--red); }
+  .tile.fill .cap, .tile.fill .val { color: #000; }
+  .pill { --c: 10px; height: 40px; top: 74px; background: var(--green); }
+  .pill::before { content: ""; position: absolute; inset: 2px; background: var(--bg); clip-path: inherit; }
+  .pill i { position: absolute; left: 12px; top: 13px; width: 14px; height: 14px; background: var(--green); }
+  .pill b { position: absolute; left: 36px; top: 8px; font-size: 20px; color: var(--green); font-weight: normal; }
+  .foot { left: 20px; top: 548px; font-size: 18px; color: var(--muted); }
+  .cursor { width: 18px; height: 18px; background: var(--accent); box-shadow: 0 0 18px var(--accent); }
+  .finger { width: 60px; height: 150px; border: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    border-radius: 30px 30px 18px 18px; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .label { position: absolute; top: 40px; font-size: 22px; color: var(--muted); letter-spacing: 2px; }
+  .label b { color: var(--accent); font-weight: normal; }
+</style>
+</head>
+<body class="scan">
+<div class="label" style="left:40px"><b>01 GENERAL</b> // NEW VISION</div>
+<div class="label" style="left:560px"><b>02 STICK</b> // M5STICKC PLUS2</div>
+<div class="label" style="left:1080px"><b>03 SYS</b> // LIVE NUMBERS</div>
+<script>
+const W = 600, M = 16, GAP = 12, TOP = 74, TW = (W - M * 2 - GAP * 2) / 3;
+function el(parent, cls, css, html) {
+  const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {});
+  if (html !== undefined) d.innerHTML = html; parent.appendChild(d); return d;
+}
+function panel(x, active, battery) {
+  const p = el(document.body, "panel chamfer", { left: x + "px" });
+  el(p, "bg chamfer");
+  const tabs = [["01 GENERAL", 16, 156], ["02 STICK", 182, 124], ["03 SYS", 316, 104]];
+  tabs.forEach(([t, tx, tw], i) => el(p, "abs tab chamfer " + (i === active ? "on" : "off"), { left: tx + "px", width: tw + "px" }, "<span>" + t + "</span>"));
+  el(p, "abs", { left: "432px", top: "28px", width: "12px", height: "12px", background: "var(--green)" });
+  const lit = Math.round(battery / 20);
+  for (let i = 0; i < 5; i++) el(p, "abs seg", { left: (534 + i * 10) + "px", background: i < lit ? "var(--accent)" : "var(--dim)" });
+  el(p, "abs", { left: "466px", top: "22px", width: "64px", textAlign: "right", fontSize: "18px" }, "+" + battery + "%");
+  el(p, "abs line");
+  el(p, "abs mark", { left: tabs[active][1] + "px" });
+  return p;
+}
+function tile(p, col, row, top, h, cap, val, opt) {
+  opt = opt || {};
+  const t = el(p, "abs tile chamfer" + (opt.fill ? " fill" : "") + (opt.hover ? " hover" : "") + (opt.danger ? " danger" : ""),
+    { left: (M + col * (TW + GAP)) + "px", top: (top + row * (h + GAP)) + "px", width: TW + "px", height: h + "px" });
+  el(t, "cap", null, cap);
+  el(t, "val" + (opt.off ? " off" : "") + (opt.danger ? " red" : ""), null, val);
+  return t;
+}
+
+// 01 GENERAL
+let p = panel(40, 0, 87);
+[["DETECT", "ON"], ["MODEL", "11N 416"], ["CLASSES", "80/80"],
+ ["BOXES", "3"], ["ASK", "GAZE"], ["QR", "ON"],
+ ["LAPTOP", "ON"], ["CAPRI", "OFF", { off: true }], ["CAPRI", "SIT"],
+ ["THEME", "ORANGE"], ["FX", "HIGH", { hover: true }], ["FIND", "12"]]
+  .forEach(([c, v, o], i) => tile(p, i % 3, Math.floor(i / 3), TOP, 100, c, v, o));
+el(p, "abs foot", null, "DETECTION ONLINE");
+el(p, "abs cursor", { left: "300px", top: "432px" });
+
+// 02 STICK
+p = panel(560, 1, 71);
+const pw = (W - M * 2 - GAP) / 2;
+[["QUEST LINK", M], ["LAPTOP", M + pw + GAP]].forEach(([t, x]) => { const q = el(p, "abs pill chamfer", { left: x + "px", width: pw + "px" }); el(q, "", null, "<i></i><b>" + t + "</b>"); });
+el(p, "abs", { left: "20px", top: "130px", fontSize: "18px", color: "var(--muted)" }, "PING 38MS  //  UP 12M  //  HEAP 186K");
+[["EXPLORER", "WIN+E", { fill: true }], ["CLOSE", "ALT+F4"], ["BEEP", "TEST"],
+ ["SCREEN", "HOME"], ["BRIGHT", "MED"], ["VOLUME", "LOW"],
+ ["LINK", "RESET"], ["REBOOT", "RUN", { danger: true }], ["POWER", "OFF", { danger: true }],
+ ["FLIP", "0°", { off: true }]]
+  .forEach(([c, v, o], i) => tile(p, i % 3, Math.floor(i / 3), TOP + 92, 74, c, v, o));
+el(p, "abs foot", null, "EXPLORER -&gt; LAPTOP");
+// the panel shaken: torn fragments over it
+[["c", 30, 250, 160], ["m", 260, 330, 220], ["a", 120, 420, 120], ["w", 380, 210, 90]].forEach(([k, x, y, w]) =>
+  el(p, "frag " + k, { left: x + "px", top: y + "px", width: w + "px" }));
+el(p, "abs", { left: "402px", top: "62px", width: "2px", height: "480px", background: "var(--cyan)", opacity: ".5" });
+
+// 03 SYS
+p = panel(1080, 2, 87);
+[["FPS", "72"], ["YOLO", "96MS"], ["LAYERS", "62/F"],
+ ["OBJECTS", "4"], ["MEMORY", "12"], ["ASK", "3.1S"],
+ ["TEMP", "34°C"], ["RAM", "812MB"], ["GPU", "58%"],
+ ["BATTERY", "87%"], ["STICK", "38MS"], ["LAPTOP", "LINK"]]
+  .forEach(([c, v], i) => tile(p, i % 3, Math.floor(i / 3), TOP, 100, c, v));
+el(p, "abs foot", null, "UP 41M  //  MODEL 11N 416  //  8GB");
+</script>
+</body>
+</html>
