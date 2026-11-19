@@ -119,6 +119,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const float OpenSeconds = 0.22f;
         private const float CloseSeconds = 0.16f;
 
+        // Pose filters: position in m/s terms (beta 20: at 0.5 m/s the cutoff is ~11 Hz), directions per rad/s
+        private readonly OneEuro m_positionFilter = new(1.2f, 20f);
+        private readonly OneEuro m_normalFilter = new(1.0f, 6f);
+        private readonly OneEuro m_upFilter = new(1.0f, 6f);
+        private bool m_placed;
+
         private bool m_shown;
         private bool m_wasShown;
         private float m_alpha;   // 0 closed .. 1 open
@@ -146,6 +152,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_head = head;
             NvStyle.EnsureTheme();
             m_stick.Reply += OnReply;
+            m_hands.PosesUpdated += LatePlace;
             if (m_nv.Memory != null)
             {
                 m_nv.Memory.Found += spot => ShowMessage("FOUND " + spot.Name.ToUpperInvariant());
@@ -204,11 +211,29 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             if (left.Valid)
             {
-                Place(left);
+                if (!m_placed)
+                {
+                    Place(left);   // the first frame of a new opening: no stale pose from last time
+                }
                 FeelMotion(left);
             }
             Refresh();
             Poke();
+        }
+
+        /// <summary>Placement right before rendering, from the freshest hand pose (see HandTracker.PosesUpdated).</summary>
+        private void LatePlace()
+        {
+            if (m_canvas == null || !m_canvas.gameObject.activeSelf)
+            {
+                m_placed = false;
+                return;
+            }
+            var left = m_hands.Get(HandTracker.Left);
+            if (left.Valid)
+            {
+                Place(left);
+            }
         }
 
         /// <summary>
@@ -225,25 +250,78 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
             up.Normalize();
             var position = hand.Wrist - up * 0.085f + normal * 0.02f;
+
+            // One-Euro filter: hand tracking jitters by a millimetre or two, which a rigid panel shows as shimmering
+            // text. Held still it is smoothed hard; moving, the filter opens up and adds next to no lag.
+            var dt = Mathf.Max(1e-3f, Time.unscaledDeltaTime);
+            if (!m_placed)
+            {
+                m_positionFilter.Reset(position);
+                m_normalFilter.Reset(normal);
+                m_upFilter.Reset(up);
+                m_placed = true;
+            }
+            position = m_positionFilter.Filter(position, dt);
+            normal = m_normalFilter.Filter(normal, dt).normalized;
+            up = Vector3.ProjectOnPlane(m_upFilter.Filter(up, dt), normal).normalized;
+
             // The UI faces -forward: forward points into the arm, so the readable side faces out of the palm
             m_canvas.SetPositionAndRotation(position, Quaternion.LookRotation(-normal, up));
             m_canvas.localScale = Vector3.one * Scale;
+        }
+
+        /// <summary>One-Euro filter (Casiez et al.): cutoff frequency rises with speed — smooth when slow, quick when fast.</summary>
+        private class OneEuro
+        {
+            private readonly float m_minCutoff;
+            private readonly float m_beta;
+            private const float DerivativeCutoff = 1f;
+            private Vector3 m_value;
+            private Vector3 m_speed;
+
+            public OneEuro(float minCutoff, float beta)
+            {
+                m_minCutoff = minCutoff;
+                m_beta = beta;
+            }
+
+            public void Reset(Vector3 value)
+            {
+                m_value = value;
+                m_speed = Vector3.zero;
+            }
+
+            public Vector3 Filter(Vector3 value, float dt)
+            {
+                m_speed = Vector3.Lerp(m_speed, (value - m_value) / dt, Alpha(DerivativeCutoff, dt));
+                var cutoff = m_minCutoff + m_beta * m_speed.magnitude;
+                m_value = Vector3.Lerp(m_value, value, Alpha(cutoff, dt));
+                return m_value;
+            }
+
+            private static float Alpha(float cutoff, float dt)
+            {
+                var tau = 1f / (2f * Mathf.PI * cutoff);
+                return 1f / (1f + tau / dt);
+            }
         }
 
         /// <summary>Wrist acceleration (filtered: hand tracking jitters) in the panel's right / up axes, for the glitch.</summary>
         private void FeelMotion(HandTracker.Hand hand)
         {
             var dt = Mathf.Max(1e-3f, Time.deltaTime);
+            // Relative to the head: walking moves hand and head together and must not shake the panel
+            var wrist = hand.Wrist - m_head.position;
             if (!m_haveWrist)
             {
                 m_haveWrist = true;
-                m_lastWrist = hand.Wrist;
+                m_lastWrist = wrist;
                 m_velocity = m_accel = Vector3.zero;
                 m_lastRotation = m_canvas.rotation;
                 return;
             }
-            var velocity = (hand.Wrist - m_lastWrist) / dt;
-            m_lastWrist = hand.Wrist;
+            var velocity = (wrist - m_lastWrist) / dt;
+            m_lastWrist = wrist;
             var newVelocity = Vector3.Lerp(m_velocity, velocity, 1f - Mathf.Exp(-20f * dt));
             var accel = (newVelocity - m_velocity) / dt;
             m_velocity = newVelocity;
@@ -254,6 +332,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             delta.ToAngleAxis(out var angle, out var axis);
             var twist = Vector3.Dot(axis, m_canvas.forward) * (angle > 180f ? angle - 360f : angle) / dt;
 
+            // While a fingertip is at the panel the tiles must stay where they are: no shaking under the finger
+            if (m_cursor.enabled)
+            {
+                m_glitch.Feel(Vector2.zero);
+                return;
+            }
             m_glitch.Feel(new Vector2(Vector3.Dot(m_accel, m_canvas.right), Vector3.Dot(m_accel, m_canvas.up)), twist);
         }
 
@@ -1113,6 +1197,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             if (m_stick != null)
             {
                 m_stick.Reply -= OnReply;
+            }
+            if (m_hands != null)
+            {
+                m_hands.PosesUpdated -= LatePlace;
             }
             IsVisible = false;
         }

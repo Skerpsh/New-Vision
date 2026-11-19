@@ -37,9 +37,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Transform m_trackingSpace;
         private bool m_warned;
 
-        public void Init(Transform trackingSpace) => m_trackingSpace = trackingSpace;
+        public void Init(Transform trackingSpace)
+        {
+            m_trackingSpace = trackingSpace;
+            Application.onBeforeRender += LatePoses;
+        }
+
+        private void OnDestroy() => Application.onBeforeRender -= LatePoses;
 
         public Hand Get(int hand) => m_hands[hand];
+
+        /// <summary>Raised right before rendering, after the poses were read again (the latest prediction for this frame).</summary>
+        public event System.Action PosesUpdated;
 
         private void Update()
         {
@@ -50,14 +59,32 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 m_warned = true;
                 Debug.LogWarning("[NewVision] stick: hand skeleton is not OpenXR, the wrist panel can't track the hand");
             }
-            Read(Left, OVRPlugin.Hand.HandLeft);
-            Read(Right, OVRPlugin.Hand.HandRight);
+            Read(Left, OVRPlugin.Hand.HandLeft, true);
+            Read(Right, OVRPlugin.Hand.HandRight, true);
         }
 
-        private void Read(int index, OVRPlugin.Hand hand)
+        /// <summary>
+        /// The camera rig moves the head to its latest pose just before rendering; reading the hands again at that moment
+        /// keeps things attached to them (the wrist panel) in step with the head instead of a moment behind while moving.
+        /// </summary>
+        private void LatePoses()
+        {
+            if (!isActiveAndEnabled)
+            {
+                return;
+            }
+            Read(Left, OVRPlugin.Hand.HandLeft, false);
+            Read(Right, OVRPlugin.Hand.HandRight, false);
+            PosesUpdated?.Invoke();
+        }
+
+        private void Read(int index, OVRPlugin.Hand hand, bool gestures)
         {
             ref var h = ref m_hands[index];
-            h.Gesture = OVRHand.MicrogestureType.NoGesture;
+            if (gestures)
+            {
+                h.Gesture = OVRHand.MicrogestureType.NoGesture;
+            }
             if (OVRPlugin.HandSkeletonVersion != OVRHandSkeletonVersion.OpenXR ||
                 !OVRPlugin.GetHandState(OVRPlugin.Step.Render, hand, ref m_state) ||
                 (m_state.Status & OVRPlugin.HandStatus.HandTracked) == 0 ||
@@ -65,7 +92,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 h.Valid = false;
                 h.HighConfidence = false;
-                m_lastGesture[index] = OVRPlugin.MicrogestureType.NoGesture;
+                if (gestures)
+                {
+                    m_lastGesture[index] = OVRPlugin.MicrogestureType.NoGesture;
+                }
                 return;
             }
 
@@ -80,8 +110,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var middle = Joint(OVRPlugin.BoneId.XRHand_MiddleProximal);
             h.FingerDirection = (middle - h.Wrist).sqrMagnitude > 1e-6f ? (middle - h.Wrist).normalized : palmRotation * Vector3.forward;
 
-            // Microgestures: report the frame a gesture appears, not every frame it is held
-            if (OVRPlugin.GetHandTrackingState(OVRPlugin.Step.Render, hand, ref m_trackingState))
+            // Microgestures: report the frame a gesture appears, not every frame it is held (once per frame, in Update)
+            if (gestures && OVRPlugin.GetHandTrackingState(OVRPlugin.Step.Render, hand, ref m_trackingState))
             {
                 var gesture = m_trackingState.Microgesture;
                 if (gesture != m_lastGesture[index] && gesture > OVRPlugin.MicrogestureType.NoGesture &&
