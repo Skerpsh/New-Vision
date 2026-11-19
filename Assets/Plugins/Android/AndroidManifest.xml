@@ -30,4 +30,6 @@
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <!-- Live subtitles: Russian speech recognized on the headset (sherpa-onnx), audio never leaves it -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
 </manifest>

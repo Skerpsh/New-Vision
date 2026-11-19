@@ -65,6 +65,13 @@ brackets, the Tektur typeface and glitches when you move fast. It is the same vi
   view** points the way when it's behind you, and when the detector sees it again the marker turns green,
   `FOUND` pops up and **the stick beeps**.
 
+### ▭ Live subtitles: Russian speech as text, offline
+
+- **GENERAL › SUBS** turns on real-time Russian speech recognition **on the headset**
+  ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with the streaming T-One model; the audio never leaves it).
+- A black-glass strip low in your view shows the phrase being spoken (muted) and the finished ones; it is fixed to
+  your view like a screen caption, trails head turns on a soft spring and fades out after a pause.
+
 ### ▤ The wrist panel: the only control surface
 
 <p align="center"><img src="docs/wrist-panel.png" alt="The three tabs of the wrist panel: 01 GENERAL, 02 STICK and 03 SYS" width="100%"></p>
@@ -75,7 +82,7 @@ and glitches when you flick your hand.
 
 | Tab | What's there |
 |---|---|
-| **01 GENERAL** | detection on/off, model, classes, boxes shown, Gemini by gaze or pinch, QR reader, laptop gestures, Capri, theme (6 colours), glitch FX level, FIND |
+| **01 GENERAL** | detection on/off, model, classes, boxes shown, Gemini by gaze or pinch, QR reader, laptop gestures, Capri, theme (6 colours), glitch FX level, FIND, SUBS |
 | **02 STICK** | headset and laptop link, laptop shortcuts, beep, the stick's screen page, brightness, volume, screen flip, reconnect, reboot, power off |
 | **03 SYS** | live numbers: FPS, detection time, layers per frame, objects in view, memory, Gemini latency, temperature, RAM, GPU, batteries, stick ping |
 
@@ -130,16 +137,19 @@ No controllers anywhere: the app runs in hands-only mode.
 1. **Clone with LFS**: `git lfs install`, then clone. The files in
    `Assets/PassthroughCameraApiSamples/MultiObjectDetection/SentisInference/Model/` must be megabytes, not ~130-byte
    pointers (otherwise `git lfs pull`).
-2. **Open** the folder in Unity Hub, switch to **Android** in *File → Build Profiles*.
-3. Run **New Vision → Apply App Settings** and **New Vision → Convert Models**.
-4. Connect the headset and **Build And Run**. Without the editor:
+2. **Speech model** for the subtitles (~123 MB, kept out of git): `.\Tools\get_speech_model.ps1`.
+   Without it everything else works and SUBS says `NO MODEL`.
+3. **Open** the folder in Unity Hub, switch to **Android** in *File → Build Profiles*.
+4. Run **New Vision → Apply App Settings** and **New Vision → Convert Models**.
+5. Connect the headset and **Build And Run**. Without the editor:
    ```powershell
    Unity.exe -batchmode -quit -projectPath . -buildTarget Android `
      -executeMethod NewVision.Editor.NewVisionBuild.BuildAndroid      # -> Builds/NewVision.apk
    adb install -r Builds/NewVision.apk
    ```
-5. In the headset allow **camera**, **spatial data** and **nearby devices** (Bluetooth, for the stick).
-6. *Optional:* the Gemini key. Save it as `gemini_api_key.txt` **outside the repository** and copy it to the headset:
+6. In the headset allow **camera**, **spatial data**, **nearby devices** (Bluetooth, for the stick) and, when you turn
+   on SUBS, the **microphone**.
+7. *Optional:* the Gemini key. Save it as `gemini_api_key.txt` **outside the repository** and copy it to the headset:
    ```bash
    adb push gemini_api_key.txt /sdcard/Android/data/com.newvision.app/files/gemini_api_key.txt
    ```
@@ -246,6 +256,7 @@ Assets/PassthroughCameraApiSamples/MultiObjectDetection/
   Style/Scripts/                       NvStyle (themes, cut corners, font), NvGlitch, NvBrackets, HandOutline
   Stick/Scripts/                       WristPanel, StickClient, HandTracker, LaptopGestures, NewVisionControls
   Memory/Scripts/ObjectMemory.cs       object memory and FIND guidance
+  Speech/                              live subtitles: SpeechRecognizer, SubtitleView, sherpa-onnx C# API
   ObjectInfo/Scripts/                  "What is this?", Gemini client, QR / barcodes, link preview, Wi-Fi
   SentisInference/                     models, detection, ClassFilter, tags
   Companion/                           Capri (shader under PolyForm Noncommercial, artwork not included)
@@ -283,6 +294,7 @@ in [docs/META_SAMPLE_README.md](docs/META_SAMPLE_README.md).
 - [Tektur](https://fonts.google.com/specimen/Tektur) typeface (SIL Open Font License)
 - [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) · [Unity Inference Engine](https://docs.unity3d.com/Packages/com.unity.ai.inference@latest) · [Google Gemini API](https://ai.google.dev/)
 - [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) · [M5Unified](https://github.com/m5stack/M5Unified)
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (k2-fsa) and the [T-One](https://github.com/voicekit-team/T-one) Russian speech model
 - Capri's shader is a port of [capri-desktop](https://github.com/mochiiwuff/capri-desktop)
 - [graphify](https://github.com/Graphify-Labs/graphify) for the codebase graph · object classes from [COCO](https://cocodataset.org/)
 
@@ -294,6 +306,7 @@ in [docs/META_SAMPLE_README.md](docs/META_SAMPLE_README.md).
 | Parts adapted from Vartovyi (marked in the files) | MIT |
 | Tektur font (`Tektur.ttf`, `Firmware/M5Stick/fonts/*.vlw`) | [SIL OFL 1.1](Assets/NewVision/Resources/NewVision/Tektur-OFL.txt) |
 | YOLO11 models (`yolo11*`, `yoloworld*`) by Ultralytics | [AGPL-3.0](LICENSE) |
+| sherpa-onnx native libraries (`Assets/Plugins/Android/libs/`) and its C# API (`Speech/SherpaOnnx/`); T-One model (downloaded, not in git) | Apache-2.0 |
 | Capri shader (`Companion/Resources/NewVisionCapri.shader`) | PolyForm Noncommercial 1.0.0 (Required Notice in the file); her artwork is **not** included and belongs to its rights holders |
 | Meta's sample code and assets, including the modified files | [Oculus SDK License](LICENSE.txt) and, where marked, [MIT](Assets/PassthroughCameraApiSamples/LICENSE.txt) |
 | Meta's original YOLOv9 model | [MIT](https://github.com/MultimediaTechLab/YOLO/blob/main/LICENSE) |

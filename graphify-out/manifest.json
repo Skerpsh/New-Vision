@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/DetectionManager/Scripts/DetectionUiMenuManager.cs": {
-    "mtime": 1795106951.142354,
-    "seen": 1795111885.7076306,
-    "ast_hash": "d6f5abeebd767b69976df4d82da7a54c",
+    "mtime": 1795115068.831625,
+    "seen": 1795116750.7894154,
+    "ast_hash": "7dc79aaf01637bbe785e11de05815551",
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/DetectionManager/Scripts/DetectionUiTextWritter.cs": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/SentisInference/Scripts/SentisInferenceRunManager.cs": {
-    "mtime": 1795109493.6732929,
-    "seen": 1795111885.7076306,
-    "ast_hash": "40d9ea678f5a12844037c1a0e318afa4",
+    "mtime": 1795116272.7791646,
+    "seen": 1795116750.7894154,
+    "ast_hash": "bf1c8303ea3a633824722f4815c9e30d",
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/SentisInference/Scripts/SentisInferenceUiManager.cs": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Stick/Scripts/NewVisionControls.cs": {
-    "mtime": 1795109572.068261,
-    "seen": 1795111885.7076306,
-    "ast_hash": "afe7e2fe98c7b853de76dfabe0944b0c",
+    "mtime": 1795114499.2070715,
+    "seen": 1795116750.7894154,
+    "ast_hash": "b0cc1a468ddbee7b03c8da80d74e05b7",
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Stick/Scripts/StickClient.cs": {
@@ -252,15 +252,15 @@
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Stick/Scripts/StickController.cs": {
-    "mtime": 1795109572.1321146,
-    "seen": 1795111885.7076306,
-    "ast_hash": "de7bc6bedff8ce97d5e9a7ff6200eec3",
+    "mtime": 1795114499.3640156,
+    "seen": 1795116750.7894154,
+    "ast_hash": "446a8215e4eb067ffa3ce5a23256e16c",
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Stick/Scripts/WristPanel.cs": {
-    "mtime": 1795111037.5878832,
-    "seen": 1795111885.7076306,
-    "ast_hash": "8634580cca401a17a81c838370668615",
+    "mtime": 1795115658.34996,
+    "seen": 1795116750.7894154,
+    "ast_hash": "9001ec5df91070efdc5d9b71007624f4",
     "semantic_hash": ""
   },
   "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Style/Scripts/HandOutline.cs": {
@@ -492,9 +492,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795112244.2195027,
-    "seen": 1795112260.5713427,
-    "ast_hash": "021740f5b594839adf06b92e8eb009eb",
+    "mtime": 1795116746.4637325,
+    "seen": 1795116750.796011,
+    "ast_hash": "a5580c61f6e7af26f86e125340ad6fc3",
     "semantic_hash": ""
   },
   "docs/META_SAMPLE_README.md": {
@@ -711,6 +711,30 @@
     "mtime": 1795112067.9263558,
     "seen": 1795112260.5815911,
     "ast_hash": "2ee054ddf8e98397a63f9e83b7bd3401",
+    "semantic_hash": ""
+  },
+  "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Speech/Scripts/SpeechRecognizer.cs": {
+    "mtime": 1795115098.653348,
+    "seen": 1795116750.7894154,
+    "ast_hash": "a97efdc7445a41f87c8ce0cd8fca7304",
+    "semantic_hash": ""
+  },
+  "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Speech/Scripts/SubtitleView.cs": {
+    "mtime": 1795115790.2490032,
+    "seen": 1795116750.7894154,
+    "ast_hash": "a8922a3f820e0d569d400ab5572c2030",
+    "semantic_hash": ""
+  },
+  "Assets/PassthroughCameraApiSamples/MultiObjectDetection/Speech/SherpaOnnx/SherpaOnnx.cs": {
+    "mtime": 1795114377.379923,
+    "seen": 1795116750.7894154,
+    "ast_hash": "d57aeeb5dbd5b508322ae570f70ddb65",
+    "semantic_hash": ""
+  },
+  "Tools/get_speech_model.ps1": {
+    "mtime": 1795114508.6970453,
+    "seen": 1795116750.7944434,
+    "ast_hash": "7a9b0f0fc6b9cf987ef2aef290254352",
     "semantic_hash": ""
   }
 }

@@ -27,5 +27,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         /// <summary>Where objects were seen; set up by StickController (it beeps the stick when one is found).</summary>
         public ObjectMemory Memory;
+
+        /// <summary>Live Russian subtitles (sherpa-onnx, on the headset); set up by StickController.</summary>
+        public SpeechRecognizer Speech;
     }
 }

@@ -27,6 +27,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var memory = root.AddComponent<ObjectMemory>();
             memory.Init(ui, head, stick);
             controls.Memory = memory;
+            var speech = root.AddComponent<SpeechRecognizer>();
+            root.AddComponent<SubtitleView>().Init(speech, head);
+            controls.Speech = speech;
             root.AddComponent<WristPanel>().Init(stick, hands, gestures, controls, head);
             root.AddComponent<HandOutline>();   // the virtual hands as a faint outline in the theme colour
         }

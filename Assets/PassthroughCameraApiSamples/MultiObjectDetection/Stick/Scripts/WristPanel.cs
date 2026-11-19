@@ -118,6 +118,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private float m_pageChangedAt = -10f;
         private const float OpenSeconds = 0.22f;
         private const float CloseSeconds = 0.16f;
+        private const float OpenDelay = 0.08f;
+        private const float CloseDelay = 0.25f;
+        private const float LostGraceSeconds = 0.4f;
+        private float m_wantSince;
+        private float m_lastTracked = -10f;
 
         // Pose filters: position in m/s terms (beta 20: at 0.5 m/s the cutoff is ~11 Hz), directions per rad/s
         private readonly OneEuro m_positionFilter = new(1.2f, 20f);
@@ -172,20 +177,34 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             MeasureSystem();
 
             var left = m_hands.Get(HandTracker.Left);
+            bool want;
             if (left.Valid && !BrowserPanel.IsOpen)
             {
+                m_lastTracked = Time.time;
                 var toHead = (m_head.position - left.Palm).normalized;
                 var facing = Vector3.Dot(left.PalmNormal, toHead);
-                m_shown = m_shown ? facing > HideFacing : facing > ShowFacing && left.HighConfidence;
+                want = m_shown ? facing > HideFacing : facing > ShowFacing && left.HighConfidence;
             }
             else
             {
-                m_shown = false;
+                // A hand lost for a moment (fast motion, the other hand in front) keeps the panel up
+                want = m_shown && !BrowserPanel.IsOpen && Time.time - m_lastTracked < LostGraceSeconds;
+            }
+            // Debounce: the wish has to hold a moment, so a wrist right at the angle limit doesn't make it flicker
+            if (want == m_shown)
+            {
+                m_wantSince = Time.time;
+            }
+            else if (Time.time - m_wantSince >= (want ? OpenDelay : CloseDelay))
+            {
+                m_shown = want;
+                m_wantSince = Time.time;
             }
 
             if (m_shown != m_wasShown)
             {
                 m_wasShown = m_shown;
+                Debug.Log($"[NewVision] panel: {(m_shown ? "open" : "closed")} on {m_page}");
                 if (m_shown)
                 {
                     m_pageChangedAt = Time.time;   // opening decodes the text, like a screen waking up
@@ -519,6 +538,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 m_armed = false;
                 m_hovered.FlashUntil = Time.time + 0.18f;
+                Debug.Log($"[NewVision] panel: {m_page} > {m_hovered.Caption?.text ?? m_hovered.ValueText()} ({m_hovered.ValueText()})");
                 m_hovered.Press();
             }
         }
@@ -726,7 +746,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void BuildGeneral()
         {
-            const float h = 100f;
+            const float h = 78f;
             var g = Page.General;
             AddTile(g, 0, 0, GridTop, h, "DETECT", () => m_nv.GetDetecting() ? "ON" : "OFF", () =>
             {
@@ -803,6 +823,33 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 m_nextFindSort = 0f;
                 ShowPage(Page.Find);
             }, () => m_nv.Memory != null && m_nv.Memory.Count > 0);
+
+            AddTile(g, 0, 4, GridTop, h, "SUBS", SubsState, () =>
+            {
+                if (m_nv.Speech == null)
+                {
+                    return;
+                }
+                m_nv.Speech.Enabled = !m_nv.Speech.Enabled;
+                ShowMessage(m_nv.Speech.Enabled ? "SUBTITLES ON // RU" : "SUBTITLES OFF");
+            }, () => m_nv.Speech != null && m_nv.Speech.Enabled);
+        }
+
+        private string SubsState()
+        {
+            if (m_nv.Speech == null || !m_nv.Speech.Enabled)
+            {
+                return "OFF";
+            }
+            return m_nv.Speech.Current switch
+            {
+                SpeechRecognizer.State.Listening => "RU",
+                SpeechRecognizer.State.Installing or SpeechRecognizer.State.Loading => "LOAD",
+                SpeechRecognizer.State.NoPermission => "NO MIC",
+                SpeechRecognizer.State.NoModel => "NO MODEL",
+                SpeechRecognizer.State.Error => "ERROR",
+                _ => "..."
+            };
         }
 
         private string CapriState()

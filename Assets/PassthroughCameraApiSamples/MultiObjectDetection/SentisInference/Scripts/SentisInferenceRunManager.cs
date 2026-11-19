@@ -59,7 +59,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Material m_letterboxMaterial;
 
         // Adaptive layers per frame
-        private const float MinLayersPerFrame = 8f;
+        // Floor: even at the minimum a detection never spans more than ~25 frames (~350 ms)
+        private const float MinLayersPerFrame = 16f;
         private const float MaxLayersPerFrame = 2000f;
         private const float LayersIncrease = 2f;
         private const float LayersDecreaseFactor = 0.85f;
@@ -170,6 +171,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
             OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
 
+            // Full resolution always: with dynamic resolution the system drops to 70 % whenever detection keeps the GPU busy,
+            // and text and edges turn mushy. Detection adapts to the GPU instead (see AdaptLayersPerFrame).
+            if (OVRManager.instance != null)
+            {
+                OVRManager.instance.enableDynamicResolution = false;
+            }
+            UnityEngine.XR.XRSettings.eyeTextureResolutionScale = 1f;
+
             // Hide the boundary (Guardian) so you can walk around freely, e.g. outdoors. Works while passthrough is on;
             // needs 'Boundary Visibility Support' in the project config (New Vision > Apply App Settings).
             if (OVRManager.instance != null)
@@ -186,6 +195,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 // Detection pauses while the browser is open: no boxes over the page, and the GPU is free for scrolling
                 if (BrowserPanel.IsOpen)
                 {
+                    SetIdleReason("browser open");
                     m_uiInference.ClearAnnotations();
                     while (BrowserPanel.IsOpen)
                     {
@@ -259,10 +269,24 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             Destroy(tempTexture);
         }
 
+        /// <summary>Why detection is idle (logged once when it changes): null while it runs.</summary>
+        private void SetIdleReason(string reason)
+        {
+            if (reason != m_idleReason)
+            {
+                Debug.Log(reason != null ? $"[NewVision] detection idle: {reason}" : "[NewVision] detection resumed");
+                m_idleReason = reason;
+            }
+        }
+
+        private string m_idleReason;
+
         private IEnumerator RunInference()
         {
             if (!m_cameraAccess.IsPlaying)
             {
+                SetIdleReason("camera not playing");
+                yield return null;   // don't spin: this coroutine is called again right away
                 yield break;
             }
 
@@ -280,9 +304,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             static extern OVRPlugin.Result ovrp_GetNodePoseStateAtTime(double time, OVRPlugin.Node nodeId, out OVRPlugin.PoseStatef nodePoseState);
             if (!ovrp_GetNodePoseStateAtTime(OVRPlugin.GetTimeInSeconds(), OVRPlugin.Node.Head, out _).IsSuccess())
             {
-                Debug.Log("ovrp_GetNodePoseStateAtTime failed, which means 'm_cameraAccess.GetCameraPose()' is not reliable, skipping.");
+                SetIdleReason("no head pose (ovrp_GetNodePoseStateAtTime failed)");
+                yield return null;
                 yield break;
             }
+            SetIdleReason(null);
 
             var cachedCameraPose = m_cameraAccess.GetCameraPose();
             var inferenceStartTime = Time.realtimeSinceStartup;
@@ -298,6 +324,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             // Schedule the model layers, a few per frame so rendering doesn't wait for the whole network
             m_droppedFrames = 0;
+            var startFrame = Time.frameCount;   // the drop share is over every frame of this inference, readbacks included
             var layersPerFrame = m_adaptiveLayers ? Mathf.RoundToInt(m_layerBudget) : m_layersPerFrame;
             var frames = 1;
             var layers = 0;
@@ -330,7 +357,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             using var boxes = boxesAwaiter.GetResult();
             using var classIDs = classIDsAwaiter.GetResult();
             using var scores = scoresAwaiter.GetResult();
-            AdaptLayersPerFrame(layers, Time.realtimeSinceStartup - inferenceStartTime);
+            AdaptLayersPerFrame(layers, Time.realtimeSinceStartup - inferenceStartTime, Time.frameCount - startFrame);
             if (boxes.shape[0] == 0)
             {
                 yield break;
@@ -376,10 +403,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         }
 
         /// <summary>
-        /// AIMD like TCP: a few more layers per frame after every smooth inference, 15 % fewer after one with a dropped frame.
-        /// Settles just below the most the GPU can take next to rendering.
+        /// Layers per frame from the share of dropped frames during the last inference: down 15 % when more than one frame in
+        /// ten was dropped, unchanged for a few, up when (almost) none. Judging by the share, not by any drop at all, matters:
+        /// a slow inference spans dozens of frames, and one of them is always dropped by something else (speech recognition,
+        /// hand tracking, the system), which used to pin the budget at the minimum for good (~750 ms per detection).
         /// </summary>
-        private void AdaptLayersPerFrame(int totalLayers, float seconds)
+        private void AdaptLayersPerFrame(int totalLayers, float seconds, int frames)
         {
             if (!m_adaptiveLayers)
             {
@@ -391,13 +420,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
             var dropped = m_droppedFrames;
-            if (dropped > 0)
+            var dropRate = dropped / (float)Mathf.Max(1, frames);
+            // Keep the GPU below ~80 %: rendering (passthrough, UI, hands) needs headroom, or the picture suffers
+            var gpu = OVRPlugin.gpuUtilSupported ? OVRPlugin.gpuUtilLevel : 0f;
+            if (dropRate > 0.05f || gpu > 0.9f)
             {
                 m_layerBudget *= LayersDecreaseFactor;
             }
-            else
+            else if (dropRate <= 0.02f && gpu < 0.8f)
             {
-                m_layerBudget += LayersIncrease;
+                // Recover in proportion: from the floor back to normal in a few seconds, not a minute
+                m_layerBudget += Mathf.Max(LayersIncrease, m_layerBudget * 0.1f);
             }
             // More than the whole network per frame makes no difference
             var max = totalLayers > 0 ? Mathf.Min(MaxLayersPerFrame, totalLayers) : MaxLayersPerFrame;
@@ -407,7 +440,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 m_nextAdaptLogTime = Time.time + 5f;
                 Debug.Log($"[NewVision] adaptive: {m_layerBudget:F0} layers/frame of {totalLayers}, " +
-                          $"last inference {seconds * 1000f:F0} ms, dropped frames {dropped}");
+                          $"last inference {seconds * 1000f:F0} ms, dropped frames {dropped}/{frames}, GPU {gpu * 100f:F0}%");
             }
         }
 

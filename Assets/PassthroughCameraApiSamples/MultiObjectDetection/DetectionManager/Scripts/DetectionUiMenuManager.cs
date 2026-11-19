@@ -109,6 +109,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private void OnPauseMenu(bool visible)
         {
             m_initialMenu = false;
+            if (IsPaused != visible)
+            {
+                Debug.Log($"[NewVision] detection {(visible ? "PAUSED" : "running")}");
+            }
             IsPaused = visible;
 
             m_initialPanel.SetActive(false);
