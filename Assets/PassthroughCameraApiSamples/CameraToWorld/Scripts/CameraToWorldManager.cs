@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and affiliates.
+﻿// Copyright (c) Meta Platforms, Inc. and affiliates.
 
 using System;
 using System.Collections;
@@ -60,7 +60,7 @@ namespace PassthroughCameraSamples.CameraToWorld
 
         private void Update()
         {
-            if (InputManager.IsButtonADownOrPinchStarted())
+            if (InputManager.IsIndexPinchStarted())
             {
                 m_snapshotTaken = !m_snapshotTaken;
                 if (m_snapshotTaken)
@@ -80,7 +80,7 @@ namespace PassthroughCameraSamples.CameraToWorld
                 UpdateRaysRendering();
             }
 
-            if (InputManager.IsButtonBDownOrMiddleFingerPinchStarted())
+            if (InputManager.IsMiddleFingerPinchStarted())
             {
                 m_isDebugOn = !m_isDebugOn;
                 Debug.Log($"PCA: SpatialSnapshotManager: DEBUG mode is {(m_isDebugOn ? "ON" : "OFF")}");

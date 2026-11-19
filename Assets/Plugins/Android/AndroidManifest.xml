@@ -26,4 +26,8 @@
   <!-- Wi-Fi from QR codes: suggest the network to the system (WifiManager.addNetworkSuggestions) -->
   <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <!-- M5StickC on the headset over Bluetooth LE (Stick/Scripts, Plugins/Android/NewVisionBleLink.java); no location use -->
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 </manifest>

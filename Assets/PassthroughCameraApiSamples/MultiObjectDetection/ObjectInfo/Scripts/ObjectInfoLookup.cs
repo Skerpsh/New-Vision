@@ -81,6 +81,35 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Ray m_lastRay;
         private Vector3 m_lastTarget;
 
+        /// <summary>How long the last full Gemini answer took, seconds; 0 before the first one (wrist panel > SYS).</summary>
+        public static float LastAnswerSeconds { get; private set; }
+        private float m_lookupStartTime;
+
+        private const string DwellKey = "NewVision.Dwell";
+        private const string QrKey = "NewVision.Qr";
+
+        /// <summary>Looking at the same spot for a moment asks Gemini (wrist panel > ASK); a pinch always does.</summary>
+        public static bool DwellEnabled
+        {
+            get => PlayerPrefs.GetInt(DwellKey, 1) == 1;
+            set
+            {
+                PlayerPrefs.SetInt(DwellKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// <summary>QR codes and barcodes at the reticle are read (wrist panel > QR).</summary>
+        public static bool QrEnabled
+        {
+            get => PlayerPrefs.GetInt(QrKey, 1) == 1;
+            set
+            {
+                PlayerPrefs.SetInt(QrKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+
         public void Init(PassthroughCameraAccess cameraAccess, SentisInferenceUiManager uiInference, Func<bool> isPaused)
         {
             m_camera = cameraAccess;
@@ -131,18 +160,16 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
 
-            // While the info card is open, the reticle is hidden and no new lookups start; B or a middle finger pinch closes it,
-            // A or an index pinch runs the card's action (open link, connect to Wi-Fi, ...)
+            // While the info card is open, the reticle is hidden and no new lookups start; a middle finger pinch closes it,
+            // an index pinch runs the card's action (open link, connect to Wi-Fi, ...). The wrist panel has the hands meanwhile.
             if (m_view.PanelVisible)
             {
-                if (ClassFilterMenu.IsOpen || (!ClassFilterMenu.BlocksInput && InputManager.IsButtonBDownOrMiddleFingerPinchStarted()))
+                if (!WristPanel.IsVisible && InputManager.IsMiddleFingerPinchStarted())
                 {
                     ClosePanel();
                 }
-                else if (m_primaryAction != null && Time.time > m_panelOpenTime + 0.4f && !ClassFilterMenu.BlocksInput &&
-                         (InputManager.IsButtonADownOrPinchStarted() ||
-                          OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger, OVRInput.Controller.Touch) ||
-                          OVRInput.GetDown(OVRInput.RawButton.LIndexTrigger, OVRInput.Controller.Touch)))
+                else if (m_primaryAction != null && Time.time > m_panelOpenTime + 0.4f && !WristPanel.IsVisible &&
+                         InputManager.IsIndexPinchStarted())
                 {
                     m_primaryAction();
                 }
@@ -151,7 +178,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
 
-            if (!m_camera.IsPlaying || m_isPaused() || ClassFilterMenu.IsOpen)
+            if (!m_camera.IsPlaying || m_isPaused())
             {
                 m_view.SetReticleVisible(false);
                 m_dwellTime = 0f;
@@ -167,8 +194,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_lastTarget = target;
 
             // A QR code / barcode at the reticle takes priority over asking Gemini about the object
-            m_scanner.Scan(target);
-            var code = m_scanner.Current;
+            CodeContent code = null;
+            if (QrEnabled)
+            {
+                m_scanner.Scan(target);
+                code = m_scanner.Current;
+            }
             m_view.SetChip(code?.ChipText);
 
             // Dwell: looking at the same spot. After a lookup the head has to move away first to start the next one.
@@ -182,13 +213,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 m_dwellTime += Time.deltaTime;
             }
-            var canDwell = m_armed && !m_busy;
+            // Looking at the laptop is for stick gestures, not a question to Gemini (a pinch still asks)
+            var canDwell = DwellEnabled && m_armed && !m_busy && !LaptopGestures.LookingAtLaptop && !WristPanel.IsVisible;
             var fill = canDwell ? Mathf.Clamp01((m_dwellTime - m_ringDelay) / Mathf.Max(0.01f, m_dwellSeconds - m_ringDelay)) : 0f;
             m_view.UpdateReticle(Vector3.Distance(ray.origin, target), fill, m_busy);
 
-            var pressed = !ClassFilterMenu.BlocksInput && (InputManager.IsIndexPinchStarted() ||
-                OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger, OVRInput.Controller.Touch) ||
-                OVRInput.GetDown(OVRInput.RawButton.LIndexTrigger, OVRInput.Controller.Touch));
+            // A thumb tap microgesture on the laptop can look like a pinch: hand pinches don't ask Gemini there
+            var handPinch = InputManager.IsIndexPinchStarted() && !LaptopGestures.LookingAtLaptop && !WristPanel.IsVisible;
+            var pressed = handPinch;
             if (pressed || (canDwell && fill >= 1f))
             {
                 m_armed = false;
@@ -255,7 +287,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private void SetAction(string label, Action action)
         {
             m_primaryAction = action;
-            m_view.SetFooter(action != null ? $"A / index pinch:  {label}        B / middle pinch:  close" : null);
+            m_view.SetFooter(action != null ? $"PINCH // {label.ToUpperInvariant()}      MIDDLE // CLOSE" : null);
         }
 
         private void OpenCode(CodeContent code)
@@ -426,6 +458,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var box = FindBoxAt(ray);
             var hint = box != null ? $"{box.ClassName} ({box.Score * 100f:0}%)" : null;
             m_view.SetWaiting(box != null ? $"{box.ClassName}?" : "Looking", "Asking Gemini");
+            m_lookupStartTime = Time.time;
             m_lookup = StartCoroutine(Lookup(m_lookupId, target, box, hint, extraPrompt));
         }
 
@@ -470,6 +503,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                         return;
                     }
                     m_busy = false;
+                    LastAnswerSeconds = Time.time - m_lookupStartTime;
                     ShowAnswer(text, false);
                 },
                 error =>

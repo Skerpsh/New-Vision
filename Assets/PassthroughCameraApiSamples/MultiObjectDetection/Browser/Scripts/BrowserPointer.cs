@@ -75,18 +75,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         public void Poll()
         {
             m_wasPressed = m_pressed;
-            Stick = Vector2.zero;
 
-            var right = OVRInput.IsControllerConnected(OVRInput.Controller.RTouch);
-            var left = OVRInput.IsControllerConnected(OVRInput.Controller.LTouch);
-            if (right || left)
-            {
-                PollControllers(right, left);
-            }
-            else
-            {
-                PollHands();
-            }
+            PollHands(); // hands only: New Vision doesn't use controllers
 
             m_history[m_historyIndex] = m_ray;
             m_historyTime[m_historyIndex] = Time.time;
@@ -96,31 +86,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 PressRay = IsHand ? RayAt(Time.time - PinchRewindSeconds) : m_ray;
             }
         }
-
-        private void PollControllers(bool right, bool left)
-        {
-            if (left && OVRInput.GetDown(OVRInput.RawButton.LIndexTrigger))
-            {
-                m_source = Source.LeftController;
-            }
-            else if (right && (m_source != Source.LeftController || !left || OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger)))
-            {
-                m_source = Source.RightController;
-            }
-            var isLeft = m_source == Source.LeftController;
-            var controller = isLeft ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
-            var position = OVRInput.GetLocalControllerPosition(controller);
-            var rotation = OVRInput.GetLocalControllerRotation(controller);
-            m_ray = new Ray(ToWorld(position), ToWorld(rotation) * Vector3.forward);
-            m_pinchStrength = OVRInput.Get(isLeft ? OVRInput.RawAxis1D.LIndexTrigger : OVRInput.RawAxis1D.RIndexTrigger);
-            // Hysteresis like a button: press at 55 %, release at 35 %
-            m_pressed = m_pressed ? m_pinchStrength > 0.35f : m_pinchStrength > 0.55f;
-            var stick = OVRInput.Get(isLeft ? OVRInput.RawAxis2D.LThumbstick : OVRInput.RawAxis2D.RThumbstick);
-            Stick = new Vector2(DeadZone(stick.x), DeadZone(stick.y));
-        }
-
-        private static float DeadZone(float value) =>
-            Mathf.Abs(value) < 0.15f ? 0f : Mathf.Sign(value) * (Mathf.Abs(value) - 0.15f) / 0.85f;
 
         private void PollHands()
         {
@@ -200,10 +165,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         public bool TryGetFingertip(int hand, out Vector3 position)
         {
             position = default;
-            if (OVRInput.IsControllerConnected(OVRInput.Controller.RTouch) || OVRInput.IsControllerConnected(OVRInput.Controller.LTouch))
-            {
-                return false;
-            }
             if ((m_skeletons == null || m_skeletons.Length == 0) && Time.time >= m_nextSkeletonSearch)
             {
                 m_skeletons = FindObjectsByType<OVRSkeleton>(FindObjectsSortMode.None);

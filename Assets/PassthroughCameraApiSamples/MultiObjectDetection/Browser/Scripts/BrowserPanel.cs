@@ -1,4 +1,4 @@
-// Copyright (c) 2026 New Vision contributors
+﻿// Copyright (c) 2026 New Vision contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
 using System;
@@ -222,12 +222,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_web.UpdateTexture();
             PollState();
             UpdateSystemKeyboard();
-
-            if (OVRInput.GetDown(OVRInput.RawButton.B))
-            {
-                Close();
-                return;
-            }
 
             m_pointer.Poll();
             if (!HandleFingerTouch())
@@ -927,7 +921,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         {
             var width = PageWidth + Padding * 2f;
             var height = Padding * 3f + ToolbarHeight + PageHeight;
-            var rounded = ObjectInfoView.RoundedRectSprite(28);
+            NvStyle.EnsureTheme();
+            var rounded = NvStyle.Chamfer(16, true);
             var canvasGo = new GameObject("BrowserPanel", typeof(RectTransform), typeof(Canvas), typeof(Image));
             canvasGo.transform.SetParent(transform, false);
             var canvas = canvasGo.GetComponent<Canvas>();
@@ -983,9 +978,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 x += buttonWidth + ButtonGap;
                 return button;
             }
-            m_backButton = AddToolbarButton("Back", 100f, () => m_web.GoBack());
-            m_forwardButton = AddToolbarButton("Forward", 120f, () => m_web.GoForward());
-            _ = AddToolbarButton("Reload", 110f, () => m_web.Reload());
+            m_backButton = AddToolbarButton("BACK", 100f, () => m_web.GoBack());
+            m_forwardButton = AddToolbarButton("FORWARD", 120f, () => m_web.GoForward());
+            _ = AddToolbarButton("RELOAD", 110f, () => m_web.Reload());
             const float rightButtons = 110f + 120f + 200f + 100f + ButtonGap * 4f;
             var urlWidth = PageWidth * 0.5f - x - rightButtons;
             m_urlButton = AddToolbarButton("", urlWidth, EditUrl);
@@ -994,17 +989,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_urlButton.Label.rectTransform.offsetMax = new Vector2(-12f, 0f);
             // Long addresses are cut at the edge of the field instead of running over the next buttons
             m_urlButton.Rect.gameObject.AddComponent<RectMask2D>();
-            _ = AddToolbarButton("Keys", 110f, () =>
+            _ = AddToolbarButton("KEYS", 110f, () =>
             {
                 CloseSystemKeyboard();
                 ShowKeyboard(!m_keyboardVisible);
             });
-            _ = AddToolbarButton("Recenter", 120f, () =>
+            _ = AddToolbarButton("RECENTER", 120f, () =>
             {
                 m_scale = 1f;
                 Recenter();
             });
-            _ = AddToolbarButton("Quest Browser", 200f, () =>
+            _ = AddToolbarButton("QUEST BROWSER", 200f, () =>
             {
                 var url = m_url;
                 Close();
@@ -1013,7 +1008,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     Application.OpenURL(uri.AbsoluteUri);
                 }
             });
-            _ = AddToolbarButton("Close", 100f, Close);
+            _ = AddToolbarButton("CLOSE", 100f, Close);
 
             // Grab bar under the window (moves it), like Quest windows
             var grabGo = new GameObject("GrabArea", typeof(RectTransform));
@@ -1067,7 +1062,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_keyboard.sizeDelta = new Vector2(width, height);
             m_keyboard.anchoredPosition = new Vector2(0f, -m_root.sizeDelta.y * 0.5f - GrabBarOffset * 2f - height * 0.5f);
             var background = keyboardGo.GetComponent<Image>();
-            background.sprite = ObjectInfoView.RoundedRectSprite(28);
+            background.sprite = NvStyle.Chamfer(16, true);
             background.type = Image.Type.Sliced;
             background.color = PanelColor;
             background.raycastTarget = false;
@@ -1138,7 +1133,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             rect.anchoredPosition = position;
             rect.sizeDelta = size;
             var background = go.GetComponent<Image>();
-            background.sprite = ObjectInfoView.RoundedRectSprite(28);
+            background.sprite = NvStyle.Chamfer(16, true);
             background.type = Image.Type.Sliced;
             background.pixelsPerUnitMultiplier = 2f;
             background.color = ButtonColor;
@@ -1156,7 +1151,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             go.transform.SetParent(parent, false);
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = NvStyle.Font;
             text.fontSize = size;
             text.color = color;
             text.alignment = alignment;

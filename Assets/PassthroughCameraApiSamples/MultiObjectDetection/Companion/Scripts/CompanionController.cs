@@ -11,7 +11,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
     /// always faces you, floats, glitches now and then, cocks her head when you look at her and dozes off when you
     /// ignore her. Drawn by the NewVision/Capri shader (ported from capri-desktop) from one picture, posed on twos
     /// like cel animation: the expensive drawing goes into a render texture only when it changes (12-24 times a second),
-    /// the quad in the room just shows it. Right thumbstick click calls her back in front of you.
+    /// the quad in the room just shows it. Every so often she goes to sit on the edge of the bed from Space Setup,
+    /// legs kicking, and later comes back. Right thumbstick click: come here; left thumbstick click: go sit on the bed.
     /// Needs Companion/Resources/CapriCutout.bytes (capri-desktop's assets/capri/capri-full.png, not in git).
     /// </summary>
     public class CompanionController : MonoBehaviour
@@ -25,14 +26,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const float SpriteHeight = 420f;
         private const float SpritePad = 56f;
         private static readonly Vector2 s_feet = new(128f, 418f);
+        private static readonly Vector2 s_seat = new(128f, 232f); // where she sits: her hips
         private static readonly Vector2 s_face = new(124f, 132f);
 
         private const float SheetFps = 12f;
         private const float EffectFps = 24f; // teleports and glitches are drawn on ones
 
         [Header("Placement")]
-        [Tooltip("Height of the whole picture, mane included (meters).")]
-        [SerializeField] private float m_height = 1.9f;
+        [Tooltip("Height of the whole picture, mane included (meters). At 1.7 m her legs hang ~0.55 m: a bed's height.")]
+        [SerializeField] private float m_height = 1.7f;
         [Tooltip("How high she floats above the floor (meters).")]
         [SerializeField] private float m_hover = 0.12f;
         [Tooltip("How far in front of you she appears (meters).")]
@@ -47,13 +49,21 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         [SerializeField] private float m_noticeGazeDeg = 10f;
         [Tooltip("Seconds without a look at her before she dozes off.")]
         [SerializeField] private float m_sleepAfter = 180f;
+        [Tooltip("Seconds of standing (min, max) before she goes to sit on the bed by herself.")]
+        [SerializeField] private Vector2 m_standSeconds = new(25f, 50f);
+        [Tooltip("Seconds of sitting (min, max) before she comes back to you, unless she fell asleep there.")]
+        [SerializeField] private Vector2 m_sitSeconds = new(60f, 120f);
+        [Tooltip("How far in from the edge of the bed she sits (meters).")]
+        [SerializeField] private float m_seatInset = 0.08f;
 
         private Transform m_head;
         private Transform m_trackingSpace;
         private EnvironmentRayCastSampleManager m_raycast;
 
-        private Transform m_root;   // on the floor, turned to you
-        private Transform m_body;   // floats, leans, squashes; pivot at her feet
+        private readonly CompanionSeats m_seats = new();
+
+        private Transform m_root;   // on the floor (or the bed), turned to you
+        private Transform m_body;   // floats, leans, squashes; pivot at her feet (her hips when sitting)
         private Transform m_quad;
         private Texture2D m_cutout;
         private Material m_material;        // draws her into the canvas
@@ -72,7 +82,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private int m_lastDrawing = -1;
 
         private bool m_asleep;
+        private bool m_sitting;
         private bool m_busy;
+        private float m_nextMove;   // standing: when she goes to sit; sitting: when she gets up
         private float m_lastNoticed;
         private float m_gazeTime;
         private float m_nextTwitch;
@@ -82,6 +94,40 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         // what the whole drawing does, outside the acts
         private float m_boil = 0.9f, m_sparkle = 1f, m_alpha = 1f;
         private float m_glitch, m_glitchSeed, m_split, m_collapse, m_dissolve;
+
+        // ------------------------------------------------------------------ wrist panel controls
+
+        /// <summary>She exists in this build (her picture is in Resources) and has been set up.</summary>
+        public bool Available => enabled && m_root != null;
+
+        /// <summary>Shown in the room; hiding keeps her where she is for the next time.</summary>
+        public bool Visible => m_root != null && m_root.gameObject.activeSelf;
+
+        /// <summary>Come here: appears on the floor in front of you (also brings her back when hidden).</summary>
+        public void Recall()
+        {
+            if (Available && !m_busy)
+            {
+                _ = StartCoroutine(Teleport(false));
+            }
+        }
+
+        /// <summary>Go and sit on the edge of the bed (needs a bed in the room scan).</summary>
+        public void Sit()
+        {
+            if (Available && !m_busy)
+            {
+                _ = StartCoroutine(Teleport(true));
+            }
+        }
+
+        public void Hide()
+        {
+            if (Available && !m_busy)
+            {
+                m_root.gameObject.SetActive(false);
+            }
+        }
 
         private IEnumerator Start()
         {
@@ -136,13 +182,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_canvasMaterial = new Material(canvasShader) { mainTexture = m_canvas };
 
             BuildFigure();
+            m_seats.Load();
 
             // Head pose is (0,0,0) for the first frames until tracking starts
             while (m_head.localPosition == Vector3.zero)
             {
                 yield return null;
             }
-            yield return Teleport();
+            // She doesn't pop up at launch: she comes when called from the wrist panel (GENERAL > CAPRI)
 
             m_lastNoticed = Time.time;
             m_nextTwitch = Time.time + Random.Range(4f, 9f);
@@ -157,16 +204,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_body = new GameObject("Body").transform;
             m_body.SetParent(m_root, false);
 
-            // The quad covers the picture and the padding around it; its feet point sits on the body's pivot
+            // The quad covers the picture and the padding around it
             var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
             quad.name = "Capri";
             Destroy(quad.GetComponent<Collider>());
             m_quad = quad.transform;
             m_quad.SetParent(m_body, false);
             var view = new Vector2(SpriteWidth + 2f * SpritePad, SpriteHeight + 2f * SpritePad);
-            var center = view / 2f - new Vector2(SpritePad, SpritePad);
             m_quad.localScale = new Vector3(view.x, view.y, 1f) * m_metersPerPixel;
-            m_quad.localPosition = new Vector3(center.x - s_feet.x, s_feet.y - center.y, 0f) * m_metersPerPixel;
+            SetPivot(s_feet);
             var renderer = quad.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = m_canvasMaterial;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -176,11 +222,33 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_root.gameObject.SetActive(false);
         }
 
-        // Teleport: find where to land while still standing, squeeze into a line of light, move, open up again
-        private IEnumerator Teleport()
+        // This point of the picture (sprite pixels) sits on the body's pivot: her feet, or her hips when sitting
+        private void SetPivot(Vector2 pivot)
+        {
+            var center = new Vector2(SpriteWidth, SpriteHeight) / 2f;
+            m_quad.localPosition = new Vector3(center.x - pivot.x, pivot.y - center.y, 0f) * m_metersPerPixel;
+        }
+
+        private Vector2 Pivot => m_sitting ? s_seat : s_feet;
+
+        // Teleport: find where to land while still there, squeeze into a line of light, move, open up again
+        // standing on the floor in front of you, or sitting on the edge of the bed
+        private IEnumerator Teleport(bool toBed)
         {
             m_busy = true;
-            yield return FindSpot();
+            if (toBed)
+            {
+                if (!m_seats.TryGetSeat(m_head.position, m_seatInset, out m_spot))
+                {
+                    m_busy = false;
+                    yield break;
+                }
+                Debug.Log($"[NewVision] companion sits on the bed at {m_spot}");
+            }
+            else
+            {
+                yield return FindSpot();
+            }
             if (m_root.gameObject.activeSelf)
             {
                 yield return Tween(t =>
@@ -193,6 +261,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             m_root.position = m_spot;
             FaceUser();
+            m_sitting = toBed;
+            SetPivot(Pivot);
+            SetStance(m_sitting ? Acts.Sit : m_asleep ? Acts.Sleep : Acts.Stand);
+            m_nextMove = Time.time + (m_sitting ? Random.Range(m_sitSeconds.x, m_sitSeconds.y) : Random.Range(m_standSeconds.x, m_standSeconds.y));
+            m_lastDrawing = -1; // land already in the new pose
             m_root.gameObject.SetActive(true);
             m_glitchSeed = Random.value * 100f;
             yield return Tween(t =>
@@ -249,11 +322,6 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
 
-            if (!m_busy && OVRInput.GetDown(OVRInput.RawButton.RThumbstick))
-            {
-                _ = StartCoroutine(Teleport());
-            }
-
             FaceUser();
             Behave();
             Draw();
@@ -274,7 +342,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var now = Time.time;
 
             // Looking at her face: she notices after a moment, and wakes up if she was asleep
-            var face = m_body.TransformPoint(new Vector3(s_face.x - s_feet.x, s_feet.y - s_face.y, 0f) * m_metersPerPixel);
+            var face = m_body.TransformPoint(new Vector3(s_face.x - Pivot.x, Pivot.y - s_face.y, 0f) * m_metersPerPixel);
             var lookedAt = Vector3.Angle(m_head.forward, face - m_head.position) < m_noticeGazeDeg;
             m_gazeTime = lookedAt ? m_gazeTime + Time.deltaTime : 0f;
             if (m_gazeTime > 0.6f)
@@ -294,6 +362,20 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             if (!m_asleep && now - m_lastNoticed > m_sleepAfter)
             {
                 FallAsleep();
+            }
+
+            // After a while standing she goes to sit on the bed (if the room has one), later she comes back;
+            // asleep on the bed she stays there until you wake her up
+            if (now > m_nextMove && !m_busy && !m_asleep && m_act == null)
+            {
+                if (m_sitting || m_seats.Count > 0)
+                {
+                    _ = StartCoroutine(Teleport(!m_sitting));
+                }
+                else
+                {
+                    m_nextMove = now + Random.Range(m_standSeconds.x, m_standSeconds.y);
+                }
             }
 
             // a glitch now and then: slices and a chromatic split for two drawings
@@ -330,7 +412,10 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private void FallAsleep()
         {
             m_asleep = true;
-            SetStance(Acts.Sleep);
+            if (!m_sitting)
+            {
+                SetStance(Acts.Sleep); // on the bed she keeps sitting and dozes (see Draw)
+            }
             _ = StartCoroutine(TweenLook(0.55f, 0.35f, 0.4f, 0.9f));
             Debug.Log("[NewVision] companion fell asleep");
         }
@@ -338,7 +423,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private void WakeUp()
         {
             m_asleep = false;
-            SetStance(Acts.Stand);
+            SetStance(m_sitting ? Acts.Sit : Acts.Stand);
+            m_nextMove = Time.time + Random.Range(m_standSeconds.x, m_standSeconds.y);
             _ = StartCoroutine(TweenLook(1f, 1f, 0.9f, 0.25f));
             Perform(Acts.Flinch, 0);
             m_nextCurious = Time.time + 3f;
@@ -405,6 +491,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                         m_act = null;
                     }
                 }
+                if (m_asleep && m_sitting && m_act == null)
+                {
+                    // dozing on the edge of the bed
+                    pose.Head = 0.12f;
+                    pose.Mane = -0.1f;
+                    pose.KickL = pose.KickR = 0.03f;
+                    pose.ArmL = pose.ArmR = -0.45f;
+                }
                 Apply(pose);
                 m_redraw = true;
             }
@@ -451,12 +545,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m.SetFloat("uLongR", pose.LongR);
             m.SetFloat("uKickL", pose.KickL);
             m.SetFloat("uKickR", pose.KickR);
-            m.SetFloat("uSit", 0f);
+            m.SetFloat("uSit", m_sitting ? 1f : 0f);
             m.SetVector("uSmear", pose.Smear);
             m.SetVector("uEcho", pose.Echo);
 
-            // bob is in sprite pixels, negative is up; tilt in degrees, clockwise as seen by you
-            m_body.localPosition = new Vector3(0f, m_hover - pose.Bob * m_metersPerPixel, 0f);
+            // bob is in sprite pixels, negative is up; tilt in degrees, clockwise as seen by you.
+            // On the bed she stays seated: no lifting off it, no sinking through it
+            var bob = m_sitting ? Mathf.Clamp(pose.Bob, -3f, 2f) : pose.Bob;
+            var hover = m_sitting ? 0f : m_hover;
+            m_body.localPosition = new Vector3(0f, hover - bob * m_metersPerPixel, 0f);
             m_body.localRotation = Quaternion.Euler(0f, 0f, -pose.Tilt);
             m_body.localScale = new Vector3(pose.Sx, pose.Sy, 1f);
         }
@@ -518,7 +615,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private class Key
         {
             public int Hold;
-            public float? Head, Mane, Hair, Tilt, Bob, Sx, Sy, Arms;
+            public float? Head, Mane, Hair, Tilt, Bob, Sx, Sy, Arms, KickL, KickR;
             public Vector2? Smear;
             public int Dir; // set while sampling a directional act: mirrors head, tilt and smear
 
@@ -533,6 +630,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 if (Sx.HasValue) p.Sx = Sx.Value;
                 if (Sy.HasValue) p.Sy = Sy.Value;
                 if (Arms.HasValue) p.ArmL = p.ArmR = Arms.Value;
+                if (KickL.HasValue) p.KickL = KickL.Value;
+                if (KickR.HasValue) p.KickR = KickR.Value;
                 if (Smear.HasValue) p.Smear = new Vector2(Smear.Value.x * lean, Smear.Value.y);
             }
         }
@@ -585,6 +684,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     new Key { Hold = 4, Bob = -2, Hair = 0, Arms = 0 },
                     new Key { Hold = 6, Bob = -4, Hair = 2.5f, Arms = -0.05f },
                     new Key { Hold = 4, Bob = -2, Hair = 0, Arms = 0 },
+                },
+            };
+
+            // perched on the edge, hands down on it, legs kicking one after the other
+            public static readonly Act Sit = new()
+            {
+                Loop = true,
+                Keys = new[]
+                {
+                    new Key { Hold = 5, KickL = 0.24f, KickR = -0.03f, Hair = -1.5f, Arms = -0.42f },
+                    new Key { Hold = 2, KickL = 0.08f, KickR = 0.08f, Arms = -0.42f },
+                    new Key { Hold = 5, KickL = -0.03f, KickR = 0.24f, Hair = 1.5f, Arms = -0.42f },
+                    new Key { Hold = 2, KickL = 0.08f, KickR = 0.08f, Arms = -0.42f },
+                    new Key { Hold = 5, KickL = 0.24f, KickR = -0.03f, Hair = -1.5f, Arms = -0.42f },
+                    new Key { Hold = 2, KickL = 0.08f, KickR = 0.08f, Arms = -0.42f },
+                    new Key { Hold = 5, KickL = -0.03f, KickR = 0.24f, Hair = 1.5f, Arms = -0.42f },
+                    new Key { Hold = 10, KickL = 0.04f, KickR = 0.04f, Head = 0.08f, Arms = -0.4f }, // a pause, head cocked
                 },
             };
 

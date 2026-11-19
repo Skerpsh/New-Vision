@@ -55,12 +55,31 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private readonly List<BoundingBoxData> m_rankedBoxes = new();
         private System.Comparison<BoundingBoxData> m_byRankDescending;
 
+        private const string MaxBoxesKey = "NewVision.MaxBoxes";
+        private const float TagHeight = 52f;
+        private const float TagPadding = 14f;
+
+        /// <summary>How many confirmed objects get a frame at once (wrist panel > BOXES), 1..6, saved.</summary>
+        public int MaxVisibleBoxes
+        {
+            get => m_maxVisibleBoxes;
+            set
+            {
+                m_maxVisibleBoxes = Mathf.Clamp(value, 1, 6);
+                PlayerPrefs.SetInt(MaxBoxesKey, m_maxVisibleBoxes);
+                PlayerPrefs.Save();
+                UpdateShownBoxes();
+            }
+        }
+
         internal class BoundingBoxData
         {
             public string ClassName;
             public int ClassId;
             public RectTransform BoxRectTransform;
-            public SharpFrame Frame;
+            public NvBrackets Frame;
+            public RectTransform Tag;
+            public Image TagBackground;
             public Text Label;
             public float lastUpdateTime;
 
@@ -81,6 +100,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void Awake()
         {
+            m_maxVisibleBoxes = Mathf.Clamp(PlayerPrefs.GetInt(MaxBoxesKey, m_maxVisibleBoxes), 1, 6);
+            NvStyle.EnsureTheme();
+            NvStyle.ThemeChanged += Recolor;
             m_detectionBoxPrefab.gameObject.SetActive(false);
             var cameraRig = FindAnyObjectByType<OVRCameraRig>();
             if (cameraRig != null)
@@ -141,12 +163,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                     {
                         box.Frame.Thickness = thickness;
                     }
-                    if (box.Label != null)
+                    if (box.Tag != null)
                     {
-                        // Keep the label the same apparent size at any distance, sitting just above the top edge of the frame
-                        var labelRect = box.Label.rectTransform;
-                        labelRect.localScale = Vector3.one * (distance * m_labelScalePerMeter);
-                        labelRect.anchoredPosition = new Vector2(0f, thickness);
+                        // Keep the tag the same apparent size at any distance, sitting on the top edge of the frame
+                        box.Tag.localScale = Vector3.one * (distance * m_labelScalePerMeter);
+                        box.Tag.anchoredPosition = new Vector2(0f, thickness);
                     }
                 }
             }
@@ -225,7 +246,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
                 var boxData = GetOrCreateBoundingBoxData(detection.classId, worldSpaceCenter, size);
                 var boxRectTransform = boxData.BoxRectTransform;
-                boxData.Label.text = $"{classname} {detection.score * 100f:0}%";
+                SetTag(boxData, $"{classname.ToUpperInvariant()} {detection.score * 100f:0}");
                 boxData.TargetPosition = worldSpaceCenter;
                 boxData.TargetRotation = Quaternion.LookRotation(normal);
                 boxData.TargetSize = size;
@@ -448,10 +469,20 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 box.Frame.enabled = box.Shown;
             }
-            if (box.Label != null)
+            if (box.Tag != null)
             {
-                box.Label.enabled = box.Shown;
+                box.Tag.gameObject.SetActive(box.Shown);
             }
+        }
+
+        private static void SetTag(BoundingBoxData box, string text)
+        {
+            if (box.Label.text == text)
+            {
+                return;
+            }
+            box.Label.text = text;
+            box.Tag.sizeDelta = new Vector2(box.Label.preferredWidth + TagPadding * 2f, TagHeight);
         }
 
         private BoundingBoxData GetBoxFromPoolOrCreate()
@@ -466,21 +497,62 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             var boxRectTransform = Instantiate(m_detectionBoxPrefab, ContentParent);
             boxRectTransform.gameObject.SetActive(true);
+
+            // Cyberdeck look: HUD corners instead of the full green frame, a cut-corner accent tag instead of plain text
+            var oldFrame = boxRectTransform.GetComponent<SharpFrame>();
+            if (oldFrame != null)
+            {
+                oldFrame.enabled = false;
+            }
+            var frame = NvStyle.Brackets("Brackets", boxRectTransform, NvStyle.Accent, 0.22f, 0.005f);
+            frame.OutlineAlpha = 0.3f;
+            NvStyle.Stretch(frame.rectTransform);
+
+            var tag = NvStyle.Rect("Tag", boxRectTransform);
+            tag.anchorMin = tag.anchorMax = new Vector2(0f, 1f);
+            tag.pivot = Vector2.zero;   // grows up and right from the top-left corner of the frame
+            var tagBackground = NvStyle.ChamferImage("Background", tag, 12f, NvStyle.Accent);
+            NvStyle.Stretch(tagBackground.rectTransform);
+
             var label = boxRectTransform.GetComponentInChildren<Text>();
-            // Label grows upwards from the top-left corner of the frame
-            label.rectTransform.pivot = Vector2.zero;
-            label.alignment = TextAnchor.LowerLeft;
-            // Dark outline keeps the green text readable on bright backgrounds
-            var outline = label.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
-            outline.effectDistance = new Vector2(4f, -4f);
+            label.transform.SetParent(tag, false);
+            label.font = NvStyle.Font;
+            label.fontSize = 36;
+            label.fontStyle = FontStyle.Normal;
+            label.color = Color.black;
+            label.alignment = TextAnchor.MiddleLeft;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            label.rectTransform.localScale = Vector3.one;
+            NvStyle.Stretch(label.rectTransform);
+            label.rectTransform.offsetMin = new Vector2(TagPadding, 0f);
+            foreach (var effect in label.GetComponents<BaseMeshEffect>())
+            {
+                effect.enabled = false;
+            }
+
             return new BoundingBoxData
             {
                 BoxRectTransform = boxRectTransform,
-                Frame = boxRectTransform.GetComponent<SharpFrame>(),
+                Frame = frame,
+                Tag = tag,
+                TagBackground = tagBackground,
                 Label = label
             };
         }
+
+        private void Recolor()
+        {
+            void Apply(BoundingBoxData box)
+            {
+                box.Frame.color = NvStyle.Accent;
+                box.TagBackground.color = NvStyle.Accent;
+            }
+            m_boxDrawn.ForEach(Apply);
+            m_boxPool.ForEach(Apply);
+        }
+
+        private void OnDestroy() => NvStyle.ThemeChanged -= Recolor;
 
         internal Transform ContentParent => m_detectionBoxPrefab.parent;
 

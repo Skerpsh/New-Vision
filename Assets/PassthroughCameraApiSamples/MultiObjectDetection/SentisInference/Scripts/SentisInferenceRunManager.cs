@@ -44,9 +44,13 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const string ModelPrefsKey = "NewVision.ModelName";
         private const string DefaultModelName = "yolo11n_416";
 
+        /// <summary>Time of the last whole detection pass and its layers per frame (wrist panel > SYS).</summary>
+        public static float LastInferenceMs { get; private set; }
+        public static int LastLayersPerFrame { get; private set; }
+
         private Worker m_engine;
         private Vector2Int m_inputSize;
-        private ClassFilterMenu m_classFilter;
+        private ClassFilter m_classFilter;
         private readonly List<(int classId, Vector4 boundingBox, float score)> m_detections = new List<(int classId, Vector4 boundingBox, float score)>();
         private ModelAsset[] m_models;
         private int m_modelIndex;
@@ -105,44 +109,62 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private static string ModelDisplayName(ModelAsset model)
         {
-            // yolo11n_320 -> "YOLO11n 320 (fast)", yolo12s_416 -> "YOLO12s 416 (accurate)", my_model -> "my model"
+            // Short, for a panel tile: yolo11n_320 -> "11N 320", yoloworld_s_416 -> "WORLD S 416", my_model -> "MY MODEL"
             if (model.name.StartsWith("yoloworld_"))
             {
-                // yoloworld_s_416 -> "YOLO-World s 416 (+ extra classes)"
-                return $"YOLO-World {model.name.Substring("yoloworld_".Length).Replace('_', ' ')} (+ extra classes)";
+                return "WORLD " + model.name.Substring("yoloworld_".Length).Replace('_', ' ').ToUpperInvariant();
             }
-            var name = model.name.Replace("yolo", "YOLO").Replace('_', ' ');
-            var size = System.Text.RegularExpressions.Regex.Match(model.name, @"^yolo\d+([nsmlx])").Groups[1].Value;
-            return size switch
-            {
-                "n" => $"{name} (fast)",
-                "s" => $"{name} (accurate)",
-                "m" or "l" or "x" => $"{name} (accurate, slow)",
-                _ => name
-            };
+            return model.name.Replace("yolo", "").Replace('_', ' ').Trim().ToUpperInvariant();
         }
 
         private IEnumerator Start()
         {
             m_uiInference.SetLabels(m_labelsAsset);
 
-            // Menu to choose which classes are detected; boxes of switched-off classes disappear right away
-            m_classFilter = gameObject.AddComponent<ClassFilterMenu>();
-            m_classFilter.Init(m_labelsAsset);
-            m_classFilter.Changed += _ => m_uiInference.ClearAnnotations();
+            // Leftover of Meta's sample: a tooltip on the left hand ("Pinch to spawn markers...") and a controller button
+            // back to a samples menu that isn't in this app
+            foreach (var leftover in FindObjectsByType<StartScene.ReturnToStartScene>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                Destroy(leftover.gameObject);
+            }
+
+            // Which classes are detected (wrist panel > CLASSES); boxes of switched-off classes disappear right away
+            m_classFilter = new ClassFilter(m_labelsAsset);
+            m_classFilter.Changed += m_uiInference.ClearAnnotations;
             var modelNames = new string[m_models.Length];
             for (var i = 0; i < m_models.Length; i++)
             {
                 modelNames[i] = ModelDisplayName(m_models[i]);
             }
-            // The switch itself happens between two inferences (see RunInference)
-            m_classFilter.SetModelOptions(modelNames, m_modelIndex, index => m_requestedModelIndex = index);
 
-            // Look at anything for 2 s (or pinch / pull a trigger) and Gemini tells what it is
+            // Look at anything for 2 s (or pinch) and Gemini tells what it is
             gameObject.AddComponent<ObjectInfoLookup>().Init(m_cameraAccess, m_uiInference, () => m_uiMenuManager.IsPaused);
 
             // Capri floating in the room (off when her picture isn't in Companion/Resources, it's not in git)
-            gameObject.AddComponent<CompanionController>();
+            var companion = gameObject.AddComponent<CompanionController>();
+
+            // The wrist panel controls everything (no controllers in this app); M5StickC on the headset for the laptop
+            var controls = new NewVisionControls
+            {
+                Classes = m_classFilter,
+                ModelNames = modelNames,
+                GetModel = () => m_requestedModelIndex,
+                // The switch itself happens between two inferences (see RunInference)
+                SetModel = index => m_requestedModelIndex = ((index % m_models.Length) + m_models.Length) % m_models.Length,
+                GetDetecting = () => !m_uiMenuManager.IsPaused,
+                SetDetecting = on =>
+                {
+                    m_uiMenuManager.SetPaused(!on);
+                    if (!on)
+                    {
+                        m_uiInference.ClearAnnotations();
+                    }
+                },
+                GetMaxBoxes = () => m_uiInference.MaxVisibleBoxes,
+                SetMaxBoxes = count => m_uiInference.MaxVisibleBoxes = count,
+                Companion = companion
+            };
+            gameObject.AddComponent<StickController>().Init(m_uiInference, controls);
 
             // Higher CPU/GPU clocks: by default the headset keeps the GPU low while the network competes with rendering
             OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
@@ -327,7 +349,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
 
             NonMaxSuppression(m_detections, boxes, classIDs, scores, m_iouThreshold, m_scoreThreshold, m_classFilter.EnabledClasses);
-            Debug.Log($"[NewVision] inference {m_models[m_modelIndex].name} {m_backend}: {(Time.realtimeSinceStartup - inferenceStartTime) * 1000f:F0} ms ({frames} frames x {layersPerFrame} layers), {m_detections.Count} objects");
+            LastInferenceMs = (Time.realtimeSinceStartup - inferenceStartTime) * 1000f;
+            LastLayersPerFrame = layersPerFrame;
+            Debug.Log($"[NewVision] inference {m_models[m_modelIndex].name} {m_backend}: {LastInferenceMs:F0} ms ({frames} frames x {layersPerFrame} layers), {m_detections.Count} objects");
 
             // Boxes are in letterboxed input pixels: map them back to the camera image, scaled to the input size
             for (var i = 0; i < m_detections.Count; i++)

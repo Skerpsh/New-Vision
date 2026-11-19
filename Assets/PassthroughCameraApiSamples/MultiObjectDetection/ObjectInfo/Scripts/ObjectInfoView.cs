@@ -33,22 +33,32 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const float FadeInSeconds = 0.3f;
         private const float FadeOutSeconds = 0.2f;
 
-        private static readonly Color TitleColor = new(0.55f, 1f, 0.6f);
-        private const string HeadingColor = "#8FD9FF";
-        private const string WarningColor = "#FFB347";
         private const float ImageMaxHeight = 300f;
-        public const string CloseHint = "B  or  pinch middle finger + thumb to close";
+        public const string CloseHint = "MIDDLE PINCH // CLOSE";
 
         // Hint under the reticle (QR code seen), in reticle canvas units
-        private const float ChipOffset = 95f;
+        private const float ChipOffset = 92f;
         private const int ChipFontSize = 30;
 
         private Transform m_head;
         private RectTransform m_reticle;
+        private NvBrackets m_brackets;
         private Image m_dot;
-        private Image m_ringTrack;
-        private Image m_ring;
+        private Image m_ringTrack;   // dwell meter under the brackets: track ...
+        private Image m_ring;        // ... and fill
+        private Image m_chipBackground;
+        private Image m_cardBackground;
+        private Image m_cardOutline;
+        private Image m_cardMark;
+        private RawImage m_cardScan;
+        private NvGlitch m_cardGlitch;
         private float m_reticleDistance = 2f;
+        // Reticle lag: a lightly under-damped spring on the view direction
+        private const float ReticleStiffness = 140f;
+        private const float ReticleDamping = 19f;
+        private const float ReticleMaxLagDeg = 4f;
+        private Vector3 m_reticleDirection;
+        private Vector3 m_reticleVelocity;
 
         private RectTransform m_card;
         private CanvasGroup m_cardGroup;
@@ -74,10 +84,32 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         public void Init(Transform head)
         {
             m_head = head;
+            NvStyle.EnsureTheme();
             BuildReticle();
             BuildCard();
+            Recolor();
+            NvStyle.ThemeChanged += Recolor;
             SetReticleVisible(false);
             m_card.gameObject.SetActive(false);
+        }
+
+        private void OnDestroy() => NvStyle.ThemeChanged -= Recolor;
+
+        private void Recolor()
+        {
+            m_brackets.color = NvStyle.WithAlpha(NvStyle.Accent, 0.8f);
+            m_dot.color = NvStyle.Accent;
+            m_ringTrack.color = NvStyle.WithAlpha(NvStyle.Dim, 0.8f);
+            m_ring.color = NvStyle.Accent;
+            m_chipBackground.color = NvStyle.Accent;
+            m_cardBackground.color = NvStyle.WithAlpha(NvStyle.Background, 0.86f);
+            m_cardOutline.color = NvStyle.Accent;
+            m_cardMark.color = NvStyle.Accent;
+            m_cardScan.color = NvStyle.WithAlpha(NvStyle.Scan, 0.9f);
+            m_title.color = NvStyle.Accent;
+            m_summary.color = NvStyle.Muted;
+            m_body.color = NvStyle.Text;
+            m_footer.color = NvStyle.Muted;
         }
 
         public void SetReticleVisible(bool visible)
@@ -98,22 +130,34 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         {
             var t = 1f - Mathf.Exp(-12f * Time.deltaTime);
             m_reticleDistance = Mathf.Lerp(m_reticleDistance, Mathf.Clamp(targetDistance, 0.4f, 6f), t);
-            var forward = m_head.forward;
+
+            // The reticle catches up with the view on a soft spring instead of being glued to the middle:
+            // it trails a little when the head turns and settles back with a hint of overshoot.
+            // (Only the picture lags; what is looked at is still taken from the exact view direction.)
+            var dt = Mathf.Min(Time.deltaTime, 0.05f);
+            var target = m_head.forward;
+            if (m_reticleDirection.sqrMagnitude < 0.5f || !m_reticle.gameObject.activeSelf)
+            {
+                m_reticleDirection = target;
+                m_reticleVelocity = Vector3.zero;
+            }
+            m_reticleVelocity += ((target - m_reticleDirection) * ReticleStiffness - m_reticleVelocity * ReticleDamping) * dt;
+            m_reticleDirection = (m_reticleDirection + m_reticleVelocity * dt).normalized;
+            // Never more than a few degrees behind, however fast the turn
+            if (Vector3.Angle(m_reticleDirection, target) > ReticleMaxLagDeg)
+            {
+                m_reticleDirection = Vector3.RotateTowards(target, m_reticleDirection, ReticleMaxLagDeg * Mathf.Deg2Rad, 0f);
+            }
+            var forward = m_reticleDirection;
             m_reticle.SetPositionAndRotation(m_head.position + forward * m_reticleDistance, Quaternion.LookRotation(forward, m_head.up));
             var worldSize = 2f * m_reticleDistance * Mathf.Tan(RingAngle * 0.5f * Mathf.Deg2Rad);
             m_reticle.localScale = Vector3.one * (worldSize / ReticleUnits);
 
-            if (busy)
-            {
-                m_ring.fillAmount = 0.25f;
-                m_ring.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -Time.time * SpinSpeed);
-            }
-            else
-            {
-                m_ring.fillAmount = fill;
-                m_ring.rectTransform.localRotation = Quaternion.identity;
-            }
-            m_ringTrack.enabled = busy || fill > 0f;
+            // Busy: the meter runs like a loading bar; the brackets breathe in
+            m_ring.fillAmount = busy ? Time.time * SpinSpeed / 360f % 1f : fill;
+            m_ringTrack.enabled = m_ring.enabled = busy || fill > 0f;
+            var squeeze = busy ? 0.85f + 0.15f * Mathf.Cos(Time.time * 6f) : 1f - 0.2f * fill;
+            m_brackets.rectTransform.localScale = Vector3.one * squeeze;
         }
 
         /// <summary>Opens the card in the middle of the view; it fades in and then floats there.</summary>
@@ -129,6 +173,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
             m_open = true;
             m_card.gameObject.SetActive(true);
+            m_cardGlitch.Pulse(0.3f);
             Canvas.ForceUpdateCanvases();
             m_halfHeight = HalfHeight();
             UpdateCard(0f);
@@ -150,7 +195,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         public void SetContent(string title, string summary, string body)
         {
             m_waitingText = null;
-            m_title.text = Escape(title);
+            var newTitle = Escape(title)?.ToUpperInvariant();
+            if (newTitle != m_title.text && m_card.gameObject.activeSelf)
+            {
+                m_cardGlitch.Pulse();   // the answer arrives with a short glitch
+            }
+            m_title.text = newTitle;
             m_summary.text = Escape(summary ?? "");
             m_summary.gameObject.SetActive(!string.IsNullOrEmpty(summary));
             m_body.text = body ?? "";
@@ -164,9 +214,9 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_waitingText = status;
         }
 
-        public static string Heading(string text) => $"<color={HeadingColor}><b>{Escape(text.ToUpperInvariant())}</b></color>";
+        public static string Heading(string text) => $"<color={NvStyle.Hex(NvStyle.Accent)}>// {Escape(text.ToUpperInvariant())}</color>";
 
-        public static string Warning(string text) => $"<color={WarningColor}>!  {Escape(text)}</color>";
+        public static string Warning(string text) => $"<color={NvStyle.Hex(NvStyle.Yellow)}>!  {Escape(text.ToUpperInvariant())}</color>";
 
         /// <summary>Makes text safe for the rich text body: '&lt;' would start a tag.</summary>
         public static string Escape(string text) => text?.Replace('<', '‹').Replace('>', '›');
@@ -249,6 +299,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             // Smooth size changes while the answer streams in, so the card grows evenly up and down
             var scale = 0.001f * CardDistance;
             m_halfHeight = Mathf.Lerp(m_halfHeight, HalfHeight(), 1f - Mathf.Exp(-8f * deltaTime));
+            m_cardScan.uvRect = new Rect(0f, 0f, 1f, Mathf.Max(1f, m_card.rect.height / 5f)); // same line spacing at any height
 
             m_floatTime += deltaTime;
             var t = m_floatTime;
@@ -281,35 +332,39 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_reticle = (RectTransform)canvasGo.transform;
             m_reticle.sizeDelta = new Vector2(ReticleUnits, ReticleUnits);
 
-            var ringSprite = CircleSprite(128, 0.78f);
-            m_ringTrack = CreateImage("RingTrack", m_reticle, ringSprite, new Color(1f, 1f, 1f, 0.18f), ReticleUnits);
-            m_ring = CreateImage("Ring", m_reticle, ringSprite, new Color(1f, 1f, 1f, 0.75f), ReticleUnits);
+            // HUD brackets around the looked-at spot, a square dot, and a dwell meter under them
+            m_brackets = NvStyle.Brackets("Brackets", m_reticle, NvStyle.Accent, 0.32f, 5f);
+            ((RectTransform)m_brackets.transform).sizeDelta = new Vector2(ReticleUnits, ReticleUnits);
+            m_dot = NvStyle.Solid("Dot", m_reticle, NvStyle.Accent);
+            m_dot.rectTransform.sizeDelta = Vector2.one * (ReticleUnits * DotRatio * 0.45f);
+            m_ringTrack = NvStyle.Solid("MeterTrack", m_reticle, NvStyle.Dim);
+            m_ringTrack.rectTransform.sizeDelta = new Vector2(ReticleUnits, 9f);
+            m_ringTrack.rectTransform.anchoredPosition = new Vector2(0f, -ReticleUnits * 0.5f - 14f);
+            m_ring = NvStyle.Solid("Meter", m_reticle, NvStyle.Accent);
+            m_ring.sprite = NvStyle.White;
             m_ring.type = Image.Type.Filled;
-            m_ring.fillMethod = Image.FillMethod.Radial360;
-            m_ring.fillOrigin = (int)Image.Origin360.Top;
-            m_ring.fillClockwise = true;
-            m_dot = CreateImage("Dot", m_reticle, CircleSprite(64, 0f), new Color(1f, 1f, 1f, 0.55f), ReticleUnits * DotRatio);
+            m_ring.fillMethod = Image.FillMethod.Horizontal;
+            m_ring.fillOrigin = (int)Image.OriginHorizontal.Left;
+            m_ring.rectTransform.sizeDelta = m_ringTrack.rectTransform.sizeDelta;
+            m_ring.rectTransform.anchoredPosition = m_ringTrack.rectTransform.anchoredPosition;
 
-            // Chip: rounded label that sizes itself to the text, hanging under the ring
-            var chipGo = new GameObject("Chip", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            // Chip: cut-corner accent tag that sizes itself to the text, hanging under the meter
+            var chipGo = new GameObject("Chip", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
             chipGo.transform.SetParent(m_reticle, false);
             m_chip = (RectTransform)chipGo.transform;
             m_chip.anchoredPosition = new Vector2(0f, -ChipOffset);
             m_chip.pivot = new Vector2(0.5f, 1f);
-            var chipBackground = chipGo.GetComponent<Image>();
-            chipBackground.sprite = RoundedRectSprite((int)CornerRadius);
-            chipBackground.type = Image.Type.Sliced;
-            chipBackground.pixelsPerUnitMultiplier = 1.6f;
-            chipBackground.color = new Color(0.04f, 0.06f, 0.08f, 0.7f);
-            chipBackground.raycastTarget = false;
+            m_chipBackground = NvStyle.ChamferImage("Background", m_chip, 10f, NvStyle.Accent);
+            m_chipBackground.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            NvStyle.Stretch(m_chipBackground.rectTransform);
             var chipLayout = chipGo.GetComponent<HorizontalLayoutGroup>();
-            chipLayout.padding = new RectOffset(20, 20, 8, 10);
+            chipLayout.padding = new RectOffset(18, 18, 6, 8);
             chipLayout.childControlWidth = true;
             chipLayout.childControlHeight = true;
             var chipFitter = chipGo.GetComponent<ContentSizeFitter>();
             chipFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             chipFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            m_chipText = CreateText("Text", m_chip, ChipFontSize, FontStyle.Bold, TitleColor, TextAnchor.MiddleCenter);
+            m_chipText = CreateText("Text", m_chip, ChipFontSize, FontStyle.Normal, Color.black, TextAnchor.MiddleCenter);
             m_chipText.horizontalOverflow = HorizontalWrapMode.Overflow;
             m_chip.gameObject.SetActive(false);
         }
@@ -329,14 +384,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_cardGroup.interactable = false;
             m_cardGroup.blocksRaycasts = false;
 
-            var background = canvasGo.GetComponent<Image>();
-            background.sprite = RoundedRectSprite((int)CornerRadius);
-            background.type = Image.Type.Sliced;
-            background.color = new Color(0.04f, 0.06f, 0.08f, 0.62f);
-            background.raycastTarget = false;
+            // Black glass with scanlines, cut corners, an accent outline and a short accent mark on the top edge
+            m_cardBackground = canvasGo.GetComponent<Image>();
+            m_cardBackground.sprite = NvStyle.Chamfer(16, true);
+            m_cardBackground.type = Image.Type.Sliced;
+            m_cardBackground.pixelsPerUnitMultiplier = 16f / CornerRadius;
+            m_cardBackground.raycastTarget = false;
+            m_cardScan = NvStyle.ScanlineOverlay(m_card, 5f, 1200f);
+            m_cardScan.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            m_cardOutline = NvStyle.ChamferImage("Outline", m_card, CornerRadius, NvStyle.Accent, false, 2.5f);
+            m_cardOutline.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            NvStyle.Stretch(m_cardOutline.rectTransform);
+            m_cardMark = NvStyle.Solid("Mark", m_card, NvStyle.Accent);
+            m_cardMark.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            NvStyle.Place(m_cardMark.rectTransform, CornerRadius + 10f, 0f, 140f, 6f);
 
             var layout = canvasGo.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(28, 28, 22, 18);
+            layout.padding = new RectOffset(30, 30, 26, 20);
             layout.spacing = 9f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -344,7 +408,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             layout.childForceExpandHeight = false;
             canvasGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            m_title = CreateText("Title", m_card, 32, FontStyle.Bold, TitleColor, TextAnchor.UpperLeft);
+            m_title = CreateText("Title", m_card, 32, FontStyle.Normal, NvStyle.Accent, TextAnchor.UpperLeft);
 
             var slotGo = new GameObject("ImageSlot", typeof(RectTransform), typeof(LayoutElement));
             slotGo.transform.SetParent(m_card, false);
@@ -357,12 +421,16 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             imageRect.anchorMin = imageRect.anchorMax = new Vector2(0f, 0.5f); // left-aligned like the text
             imageRect.pivot = new Vector2(0f, 0.5f);
             slotGo.SetActive(false);
-            m_summary = CreateText("Summary", m_card, 22, FontStyle.Italic, new Color(0.85f, 0.88f, 0.9f), TextAnchor.UpperLeft);
-            m_body = CreateText("Body", m_card, 21, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            m_summary = CreateText("Summary", m_card, 22, FontStyle.Normal, NvStyle.Muted, TextAnchor.UpperLeft);
+            m_body = CreateText("Body", m_card, 21, FontStyle.Normal, NvStyle.Text, TextAnchor.UpperLeft);
             m_body.supportRichText = true;
             m_body.lineSpacing = 1.12f;
-            m_footer = CreateText("Footer", m_card, 16, FontStyle.Normal, new Color(1f, 1f, 1f, 0.45f), TextAnchor.UpperRight);
+            m_footer = CreateText("Footer", m_card, 15, FontStyle.Normal, NvStyle.Muted, TextAnchor.UpperRight);
             m_footer.text = CloseHint;
+
+            // A short glitch when the card opens and when the answer arrives (no motion: the card floats on its own)
+            m_cardGlitch = canvasGo.AddComponent<NvGlitch>();
+            m_cardGlitch.Init(m_card, new Vector2(CardWidth, 500f), m_card, false);
         }
 
         private static Text CreateText(string name, Transform parent, int size, FontStyle style, Color color, TextAnchor alignment)
@@ -370,7 +438,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             var go = new GameObject(name, typeof(RectTransform), typeof(Text));
             go.transform.SetParent(parent, false);
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = NvStyle.Font;
             text.fontSize = size;
             text.fontStyle = style;
             text.lineSpacing = 1.05f;

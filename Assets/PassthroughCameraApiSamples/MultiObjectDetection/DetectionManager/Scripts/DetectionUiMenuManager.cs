@@ -35,6 +35,17 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_initialPanel.SetActive(false);
             m_noPermissionPanel.SetActive(false);
             m_loadingPanel.SetActive(false);
+            // No head-locked grey "Objects in view" box: the wrist panel shows the state. Hide the whole branch the label
+            // sits in (its grey background too), but never the branch that also holds the no-permission message.
+            if (m_labelInformation != null)
+            {
+                var hide = m_labelInformation.transform;
+                while (hide.parent != null && hide.parent != transform && !m_noPermissionPanel.transform.IsChildOf(hide.parent))
+                {
+                    hide = hide.parent;
+                }
+                hide.gameObject.SetActive(false);
+            }
 
             // Wait for permissions
             OnNoPermissionMenu();
@@ -80,9 +91,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private void InitialMenuUpdate()
         {
-            if (InputManager.IsButtonADownOrPinchStarted())
+            if (InputManager.IsIndexPinchStarted())
             {
                 OnPauseMenu(false);
+            }
+        }
+
+        /// <summary>Detection on / off from the wrist panel.</summary>
+        public void SetPaused(bool paused)
+        {
+            if (!m_noPermissionPanel.activeSelf)
+            {
+                OnPauseMenu(paused);
             }
         }
 
