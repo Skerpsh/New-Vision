@@ -95,8 +95,9 @@ The header always shows the battery of what the tab is about: the headset on GEN
 - **Mounted on the headset**, facing out: people around you see a live HUD with a clock, the event log, link pills
   and a ticker. Shaking your head shakes and tears the picture (Impact FX).
 - **One Bluetooth LE peripheral, two links**: a **keyboard for your laptop** and a command channel for the headset.
-- **Laptop by microgestures**: look at the laptop, then **tap your thumb on your index finger** → Explorer (Win+E),
-  **swipe left** → close the window (Alt+F4).
+- **Laptop by microgestures**: look at the laptop and slide or tap your thumb on the side of the index finger.
+  The right hand runs sound and media (play/pause, volume, tracks), the left hand runs windows (Alt+Tab, Task View,
+  desktop, snap left/right). See [Controls](#03--controls).
 - Its buttons are deliberately unused: everything is controlled from the wrist panel.
 
 ### ◇ The rest
@@ -117,8 +118,20 @@ No controllers anywhere: the app runs in hands-only mode.
 | Look at something for 2 s | anywhere | "What is this?" (can be switched to pinch-only: GENERAL › ASK) |
 | Index pinch | anywhere | "What is this?" right away; on a card: its action (open link, connect to Wi-Fi) |
 | Middle-finger pinch | card open | closes the card |
-| Thumb tap on the index finger | looking at the laptop | Win+E on the laptop |
-| Thumb swipe left | looking at the laptop | Alt+F4 on the laptop |
+
+**Laptop.** Look at the laptop to arm these (a hint over it lists them), then use the thumb on the side of the index
+finger. While the wrist panel is open the left hand belongs to it.
+
+| Thumb | Right hand: sound & media | Left hand: windows |
+|---|---|---|
+| Tap | Play / Pause | Alt+Tab (previous window) |
+| Swipe forward (towards the fingertip) | Volume up (3 steps) | Task View (Win+Tab) |
+| Swipe back | Volume down (3 steps) | Show desktop (Win+D) |
+| Swipe left | Previous track | Snap window left (Win+Left) |
+| Swipe right | Next track | Snap window right (Win+Right) |
+
+The STICK tab of the panel also has PLAY and MUTE tiles. After flashing firmware `nv-stick 6` (it added the media keys)
+remove "New Vision Stick" from the laptop's Bluetooth devices and pair it again.
 
 ## 04 // Getting started
 
@@ -180,7 +193,8 @@ No controllers anywhere: the app runs in hands-only mode.
 |---|---|---|
 | `NV?` | `NVSTICK bt=0\|1` | handshake; `bt` = laptop keyboard connected |
 | `STATUS` | `STATUS bt= bat= chg= vol= bri= scr= th= fx= clk= rot= up= heap=` | polled every second |
-| `CMD explorer` / `CMD close` | `OK …` / `ERR notpaired` | Win+E / Alt+F4 on the laptop |
+| `CMD play\|next\|prev\|volup\|voldown\|mute` | `OK …` / `ERR notpaired` | media and volume keys on the laptop |
+| `CMD switch\|tasks\|desktop\|snapleft\|snapright` | `OK …` / `ERR notpaired` | Alt+Tab, Win+Tab, Win+D, Win+Left/Right |
 | `SET vol\|bri <0..255>` | `OK …` | buzzer volume, screen brightness |
 | `SET scr home\|debug\|off` | `OK scr` | screen page |
 | `SET theme <0..5>` / `SET fx <0..2>` / `SET rot 0\|1` | `OK …` | look, Impact FX level, 180° flip |

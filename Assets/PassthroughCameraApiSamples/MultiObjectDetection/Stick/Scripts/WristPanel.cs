@@ -872,8 +872,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             const float top = GridTop + 92f;
             const float h = 74f;
             var s = Page.Stick;
-            AddTile(s, 0, 0, top, h, "EXPLORER", () => "WIN+E", () => SendStick("CMD explorer", "EXPLORER -> LAPTOP"));
-            AddTile(s, 1, 0, top, h, "CLOSE", () => "ALT+F4", () => SendStick("CMD close", "ALT+F4 -> LAPTOP"));
+            AddTile(s, 0, 0, top, h, "PLAY", () => "PAUSE", () => SendStick("CMD play", "PLAY/PAUSE -> LAPTOP"));
+            AddTile(s, 1, 0, top, h, "MUTE", () => "SOUND", () => SendStick("CMD mute", "MUTE -> LAPTOP"));
             AddTile(s, 2, 0, top, h, "BEEP", () => "TEST", () => SendStick("BEEP", null));
 
             AddTile(s, 0, 1, top, h, "SCREEN", () => (m_stick.Field("scr") ?? "--").ToUpperInvariant(), () =>
