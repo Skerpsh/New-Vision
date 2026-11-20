@@ -37,7 +37,7 @@ New Vision — MR-приложение для Meta Quest 3 на основе Met
 - `ObjectInfo/`: «What is this?» (GeminiClient, ObjectInfoView, ObjectInfoLookup), CodeScanner (ZXing), LinkPreview, WifiConnector.
 - `Stick/`: StickClient (BLE), HandTracker, LaptopGestures, WristPanel (вкладки 01 GENERAL / 02 STICK / 03 SYS + CLASSES, FIND).
 - `Style/`: NvStyle (6 тем, уровень FX, Tektur), NvBrackets, NvGlitch.
-- `Memory/`: ObjectMemory (места объектов за сессию, поиск). `Speech/`: субтитры через sherpa-onnx.
+- `Memory/`: ObjectMemory (места объектов, сохраняются между запусками через spatial anchors + `object_memory.json`; поиск FIND с миганием «горячо-холодно», без звука). `Speech/`: субтитры через sherpa-onnx.
 - `Companion/`: 2D-компаньон (порт шейдера capri-desktop, лицензия **PolyForm NC**, не AGPL; арт в gitignore).
 - `Browser/`: встроенный WebView (WIP, на паузе).
 - Android-плагины: `Assets/Plugins/Android/` (NewVisionBleLink.java, NewVisionWebView.java, libs sherpa/onnxruntime).
