@@ -264,14 +264,14 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_primaryAction = null;
         }
 
-        /// <summary>Opens a fresh card: no picture, no action, default footer.</summary>
-        private void OpenCard()
+        /// <summary>Opens a fresh card next to the looked-at point: no picture, no action, default footer.</summary>
+        private void OpenCard(Vector3 anchor)
         {
             StopRunning();
             m_view.SetImage(null);
             DestroyPreviewImage();
             m_view.SetFooter(null);
-            m_view.ShowPanel();
+            m_view.ShowPanel(anchor);
             m_panelOpenTime = Time.time;
         }
 
@@ -297,7 +297,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
             m_nextLookupTime = Time.time + 1f;
-            OpenCard();
+            OpenCard(m_lastTarget);
 
             switch (code.Kind)
             {
@@ -447,7 +447,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 return;
             }
             m_nextLookupTime = Time.time + 1f;
-            OpenCard();
+            OpenCard(target);
 
             if (!m_gemini.HasKey)
             {

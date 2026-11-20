@@ -8,7 +8,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 {
     /// <summary>
     /// Visuals of the object info lookup: the reticle in the middle of the view (dot + filling ring)
-    /// and the info card that floats in front of the user. Everything is built in code.
+    /// and the info card. The card is a "monolith": it appears upright beside the looked-at object, facing the user once,
+    /// and then stays fixed in the room (no following, no turning, no floating). Everything is built in code.
     /// </summary>
     public class ObjectInfoView : MonoBehaviour
     {
@@ -18,18 +19,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private const float ReticleUnits = 100f;
         private const float SpinSpeed = 360f;
 
-        // Card: 1 canvas unit = 1 mm at 1 m distance
+        // Card: 1 canvas unit = 1 mm at 1 m distance (the scale grows with the distance, so it always opens at the same size in view)
         private const float CardWidth = 620f;
-        private const float CardDistance = 0.85f;
         private const float CornerRadius = 28f;
-        // Lazy follow: the card stays put while the head turns a little, and glides back to the middle after a bigger turn
-        private const float FollowStartAngle = 16f;
-        private const float FollowStopAngle = 2f;
-        private const float FollowSpeed = 2.5f;
-        // Gentle floating: amplitude (m) and speed of the drift, tilt in degrees
-        private const float BobHeight = 0.006f;
-        private const float BobSide = 0.004f;
-        private const float BobTilt = 0.6f;
+        // Where the monolith stands: a bit in front of the object, but never closer or farther than these (m)
+        private const float CardInFront = 0.1f;
+        private const float CardMinDistance = 0.6f;
+        private const float CardMaxDistance = 1.4f;
+        // Gap between the object and the card's left edge, as a share of the distance (0.05 ≈ 3°), so the card doesn't cover it
+        private const float CardSideGap = 0.05f;
         private const float FadeInSeconds = 0.3f;
         private const float FadeOutSeconds = 0.2f;
 
@@ -72,11 +70,11 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Text m_chipText;
         private bool m_open;
         private float m_fade; // 0 hidden .. 1 fully shown
-        private bool m_following;
-        private Vector3 m_direction;
+        // The card's fixed place in the room: middle of the card, its turn and scale
         private Vector3 m_center;
+        private Quaternion m_rotation;
+        private float m_scale;
         private float m_halfHeight;
-        private float m_floatTime;
         private string m_waitingText;
 
         public bool PanelVisible => m_open;
@@ -160,15 +158,16 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_brackets.rectTransform.localScale = Vector3.one * squeeze;
         }
 
-        /// <summary>Opens the card in the middle of the view; it fades in and then floats there.</summary>
-        public void ShowPanel()
+        /// <summary>
+        /// Opens the card beside <paramref name="anchor"/> (the looked-at point) and fixes it there in the room.
+        /// While it is already open (e.g. a barcode card turning into a Gemini answer) it keeps its place.
+        /// </summary>
+        public void ShowPanel(Vector3 anchor)
         {
             if (!m_open || !m_card.gameObject.activeSelf)
             {
-                m_direction = m_head.forward;
-                m_center = m_head.position;
+                PlaceCard(anchor);
                 m_halfHeight = 0f;
-                m_following = false;
                 m_fade = 0f;
             }
             m_open = true;
@@ -276,48 +275,44 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             UpdateCard(Time.deltaTime);
         }
 
+        /// <summary>
+        /// Picks the card's fixed place: on the line to the object, a little in front of it, shifted to the right so the
+        /// object stays visible, standing upright and turned to the user (only around the vertical axis). Done once per card.
+        /// </summary>
+        private void PlaceCard(Vector3 anchor)
+        {
+            var eye = m_head.position;
+            var toAnchor = anchor - eye;
+            var direction = toAnchor.sqrMagnitude > 0.0001f ? toAnchor.normalized : m_head.forward;
+            var distance = Mathf.Clamp(toAnchor.magnitude - CardInFront, CardMinDistance, CardMaxDistance);
+            m_scale = 0.001f * distance;
+
+            var flat = Vector3.ProjectOnPlane(direction, Vector3.up);
+            if (flat.sqrMagnitude < 0.0001f)
+            {
+                flat = Vector3.ProjectOnPlane(m_head.forward, Vector3.up); // looking straight up / down
+            }
+            var right = Vector3.Cross(Vector3.up, flat.normalized);
+            m_center = eye + direction * distance + right * (CardWidth * 0.5f * m_scale + CardSideGap * distance);
+
+            var facing = Vector3.ProjectOnPlane(m_center - eye, Vector3.up);
+            m_rotation = Quaternion.LookRotation(facing.sqrMagnitude > 0.0001f ? facing : flat, Vector3.up);
+        }
+
         private void UpdateCard(float deltaTime)
         {
-            // Lazy follow of the view direction
-            var forward = m_head.forward;
-            var angle = Vector3.Angle(m_direction, forward);
-            if (angle > FollowStartAngle)
-            {
-                m_following = true;
-            }
-            else if (angle < FollowStopAngle)
-            {
-                m_following = false;
-            }
-            if (m_following)
-            {
-                m_direction = Vector3.Slerp(m_direction, forward, 1f - Mathf.Exp(-FollowSpeed * deltaTime)).normalized;
-            }
-            // The card lags a little behind head movement instead of being glued to it
-            m_center = Vector3.Lerp(m_center, m_head.position, 1f - Mathf.Exp(-4f * deltaTime));
-
-            // Smooth size changes while the answer streams in, so the card grows evenly up and down
-            var scale = 0.001f * CardDistance;
+            // Smooth size changes while the answer streams in, so the card grows evenly up and down around its middle
             m_halfHeight = Mathf.Lerp(m_halfHeight, HalfHeight(), 1f - Mathf.Exp(-8f * deltaTime));
             m_cardScan.uvRect = new Rect(0f, 0f, 1f, Mathf.Max(1f, m_card.rect.height / 5f)); // same line spacing at any height
 
-            m_floatTime += deltaTime;
-            var t = m_floatTime;
-            var position = m_center + m_direction * CardDistance;
-            var rotation = Quaternion.LookRotation(position - m_head.position, Vector3.up);
-            var up = rotation * Vector3.up;
-            var right = rotation * Vector3.right;
-            position += up * (BobHeight * Mathf.Sin(t * 1.1f)) + right * (BobSide * Mathf.Sin(t * 0.7f));
-            rotation *= Quaternion.Euler(0f, 0f, BobTilt * Mathf.Sin(t * 0.9f));
-
-            // Pivot is the top edge: put it half the card height above the middle of the view
-            position += up * (m_halfHeight * scale);
+            // Pivot is the top edge: put it half the card height above the card's fixed middle
+            var position = m_center + m_rotation * Vector3.up * (m_halfHeight * m_scale);
 
             // Fade-in: slight zoom from 94 % with ease-out
             var eased = 1f - (1f - m_fade) * (1f - m_fade);
             m_cardGroup.alpha = eased;
-            m_card.localScale = Vector3.one * (scale * Mathf.Lerp(0.94f, 1f, eased));
-            m_card.SetPositionAndRotation(position, rotation);
+            m_card.localScale = Vector3.one * (m_scale * Mathf.Lerp(0.94f, 1f, eased));
+            m_card.SetPositionAndRotation(position, m_rotation);
         }
 
         private float HalfHeight() => LayoutUtility.GetPreferredHeight(m_card) * 0.5f;
@@ -428,7 +423,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_footer = CreateText("Footer", m_card, 15, FontStyle.Normal, NvStyle.Muted, TextAnchor.UpperRight);
             m_footer.text = CloseHint;
 
-            // A short glitch when the card opens and when the answer arrives (no motion: the card floats on its own)
+            // A short glitch when the card opens and when the answer arrives (no motion: the card stands still)
             m_cardGlitch = canvasGo.AddComponent<NvGlitch>();
             m_cardGlitch.Init(m_card, new Vector2(CardWidth, 500f), m_card, false);
         }
