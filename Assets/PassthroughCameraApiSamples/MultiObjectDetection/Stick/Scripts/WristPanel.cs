@@ -833,6 +833,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
                 m_nv.Speech.Enabled = !m_nv.Speech.Enabled;
                 ShowMessage(m_nv.Speech.Enabled ? "SUBTITLES ON // RU" : "SUBTITLES OFF");
             }, () => m_nv.Speech != null && m_nv.Speech.Enabled);
+
+            AddTile(g, 1, 4, GridTop, h, "LANG", () => ObjectInfoLookup.AnswerRussian ? "RU" : "EN", () =>
+            {
+                ObjectInfoLookup.AnswerRussian = !ObjectInfoLookup.AnswerRussian;
+                ShowMessage(ObjectInfoLookup.AnswerRussian ? "GEMINI ANSWERS // RU" : "GEMINI ANSWERS // EN");
+            }, () => ObjectInfoLookup.AnswerRussian);
         }
 
         private string SubsState()
