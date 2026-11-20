@@ -35,7 +35,7 @@ New Vision — MR-приложение для Meta Quest 3 на основе Met
 ## Структура (`Assets/PassthroughCameraApiSamples/MultiObjectDetection/`)
 - `SentisInference/`: запуск YOLO (`SentisInferenceRunManager`) и UI рамок (`SentisInferenceUiManager`).
 - `ObjectInfo/`: «What is this?» (GeminiClient, ObjectInfoView, ObjectInfoLookup), CodeScanner (ZXing), LinkPreview, WifiConnector.
-- `Stick/`: StickClient (BLE), HandTracker, LaptopGestures, WristPanel (вкладки 01 GENERAL / 02 STICK / 03 SYS + CLASSES, FIND).
+- `Stick/`: StickClient (BLE), HandTracker, LaptopGestures (микрожесты → система ноутбука, схема в README «03 // Controls»), WristPanel (вкладки 01 VISION / 02 ASSIST / 03 STICK / 04 SYS с разделами, + CLASSES, FIND).
 - `Style/`: NvStyle (6 тем, уровень FX, Tektur), NvBrackets, NvGlitch.
 - `Memory/`: ObjectMemory (места объектов за сессию, поиск). `Speech/`: субтитры через sherpa-onnx.
 - `Companion/`: 2D-компаньон (порт шейдера capri-desktop, лицензия **PolyForm NC**, не AGPL; арт в gitignore).
@@ -69,7 +69,7 @@ New Vision — MR-приложение для Meta Quest 3 на основе Met
   `/sdcard/Android/data/com.newvision.app/files/gemini_api_key.txt`. **Никогда не просить пользователя вставить ключ в чат.**
 
 ## Протокол стика (BLE / USB serial, текстовый)
-`NV?`, `STATUS`, `CMD explorer|close`, `SET vol|bri|scr|theme|fx`, `BEEP`, `REBOOT`, `OFF`, `TIME`, `LOG <text>`.
+`NV?`, `STATUS`, `CMD play|next|prev|volup|voldown|mute|switch|tasks|desktop|snapleft|snapright`, `SET vol|bri|scr|theme|fx`, `BEEP`, `REBOOT`, `OFF`, `TIME`, `LOG <text>`.
 
 ## Возможные следующие шаги
 - Тест на улице (дистанция по размеру объекта, boundary suppression).

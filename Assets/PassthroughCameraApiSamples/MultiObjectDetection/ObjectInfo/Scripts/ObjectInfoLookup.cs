@@ -19,12 +19,13 @@ namespace PassthroughCameraSamples.MultiObjectDetection
     /// </summary>
     public class ObjectInfoLookup : MonoBehaviour
     {
-        private const string SystemPrompt =
+        // {0} is replaced with the language line, see AnswerRussian
+        private const string SystemPromptTemplate =
             "You help a person wearing mixed reality glasses. The photo comes from the headset camera. " +
             "The person is looking at the object marked by the small red circle. " +
             "Identify that object as specifically as you can (brand, model, species, breed, landmark, artwork, etc.). " +
             "Use Google Search when it helps to give accurate, current facts. " +
-            "Answer in English, plain text, no markdown except the section headings described below. " +
+            "{0} Plain text, no markdown except the section headings described below. " +
             "Line 1: the name of the object, at most 6 words. " +
             "Line 2: one sentence saying what it is. " +
             "Then 2 to 4 sections that fit this object best, chosen from: Key facts, Specs, Price, How to use, Tips, Care, " +
@@ -87,6 +88,23 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         private const string DwellKey = "NewVision.Dwell";
         private const string QrKey = "NewVision.Qr";
+        private const string RussianKey = "NewVision.AnswerRussian";
+
+        /// <summary>Gemini answers in Russian (default) or English (wrist panel > LANG).</summary>
+        public static bool AnswerRussian
+        {
+            get => PlayerPrefs.GetInt(RussianKey, 1) == 1;
+            set
+            {
+                PlayerPrefs.SetInt(RussianKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+
+        private static string SystemPrompt => string.Format(SystemPromptTemplate, AnswerRussian
+            ? "Answer in Russian, including the object name and the section names (for example Ключевые факты, " +
+              "Характеристики, Цена, Как пользоваться, Советы, Уход, Безопасность, История, Интересный факт)."
+            : "Answer in English.");
 
         /// <summary>Looking at the same spot for a moment asks Gemini (wrist panel > ASK); a pinch always does.</summary>
         public static bool DwellEnabled
