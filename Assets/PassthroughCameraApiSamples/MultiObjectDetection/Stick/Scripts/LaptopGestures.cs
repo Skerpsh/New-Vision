@@ -226,6 +226,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             go.transform.SetParent(transform, false);
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            NvStyle.Crisp(canvas);
             canvas.sortingOrder = 92;
             m_hint = (RectTransform)go.transform;
             m_hint.pivot = new Vector2(0.5f, 0f);

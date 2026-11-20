@@ -165,12 +165,18 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private Page m_page = Page.Vision;
         private float m_pageChangedAt = -10f;
         private const float OpenSeconds = 0.22f;
-        private const float CloseSeconds = 0.16f;
+        private const float CloseSeconds = 0.1f;
         private const float OpenDelay = 0.08f;
-        private const float CloseDelay = 0.25f;
-        private const float LostGraceSeconds = 0.4f;
+        // Turning the wrist away hides at once; only a wrist hovering right at the limit waits a few frames
+        private const float CloseDelay = 0.05f;
+        private const float ClearlyAwayFacing = 0.15f;
+        // A hand lost for a moment (fast motion, the other hand in front) keeps the panel up this long,
+        // unless it was already turning away when it was lost: then that was the hide gesture itself
+        private const float LostGraceSeconds = 0.35f;
+        private const float TurningAwayFacing = 0.45f;
         private float m_wantSince;
         private float m_lastTracked = -10f;
+        private float m_lastFacing = 1f;
 
         // Pose filters: position in m/s terms (beta 20: at 0.5 m/s the cutoff is ~11 Hz), directions per rad/s
         private readonly OneEuro m_positionFilter = new(1.2f, 20f);
@@ -226,24 +232,33 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             var left = m_hands.Get(HandTracker.Left);
             bool want;
+            var closeDelay = CloseDelay;
             if (left.Valid && !BrowserPanel.IsOpen)
             {
                 m_lastTracked = Time.time;
                 var toHead = (m_head.position - left.Palm).normalized;
                 var facing = Vector3.Dot(left.PalmNormal, toHead);
+                // Falling fast below the last frame's value = an intentional flick away, not jitter at the limit
+                var flick = facing < m_lastFacing - 0.04f;
+                m_lastFacing = facing;
                 want = m_shown ? facing > HideFacing : facing > ShowFacing && left.HighConfidence;
+                if (facing < ClearlyAwayFacing || flick)
+                {
+                    closeDelay = 0f;
+                }
             }
             else
             {
-                // A hand lost for a moment (fast motion, the other hand in front) keeps the panel up
-                want = m_shown && !BrowserPanel.IsOpen && Time.time - m_lastTracked < LostGraceSeconds;
+                var grace = m_lastFacing < TurningAwayFacing ? 0f : LostGraceSeconds;
+                want = m_shown && !BrowserPanel.IsOpen && Time.time - m_lastTracked < grace;
+                closeDelay = 0f;   // the grace above already was the wait
             }
             // Debounce: the wish has to hold a moment, so a wrist right at the angle limit doesn't make it flicker
             if (want == m_shown)
             {
                 m_wantSince = Time.time;
             }
-            else if (Time.time - m_wantSince >= (want ? OpenDelay : CloseDelay))
+            else if (Time.time - m_wantSince >= (want ? OpenDelay : closeDelay))
             {
                 m_shown = want;
                 m_wantSince = Time.time;
@@ -770,6 +785,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             go.transform.SetParent(transform, false);
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            NvStyle.Crisp(canvas);
             canvas.sortingOrder = 98;
             m_canvas = (RectTransform)go.transform;
             m_canvas.sizeDelta = new Vector2(Width, Height);

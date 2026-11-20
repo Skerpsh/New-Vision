@@ -171,13 +171,15 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             OVRManager.suggestedCpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
             OVRManager.suggestedGpuPerfLevel = OVRManager.ProcessorPerformanceLevel.SustainedHigh;
 
-            // Full resolution always: with dynamic resolution the system drops to 70 % whenever detection keeps the GPU busy,
-            // and text and edges turn mushy. Detection adapts to the GPU instead (see AdaptLayersPerFrame).
+            // Fixed, slightly supersampled resolution: with dynamic resolution the system drops to 70 % whenever detection
+            // keeps the GPU busy, and text and edges turn mushy. Detection adapts to the GPU instead (see AdaptLayersPerFrame);
+            // RenderQuality only steps the resolution back if frames drop anyway.
+            gameObject.AddComponent<RenderQuality>();
+            // Hands keep tracking (with plausible poses) when they leave the cameras' view, e.g. low by the hip
             if (OVRManager.instance != null)
             {
-                OVRManager.instance.enableDynamicResolution = false;
+                OVRManager.instance.wideMotionModeHandPosesEnabled = true;
             }
-            UnityEngine.XR.XRSettings.eyeTextureResolutionScale = 1f;
 
             // Hide the boundary (Guardian) so you can walk around freely, e.g. outdoors. Works while passthrough is on;
             // needs 'Boundary Visibility Support' in the project config (New Vision > Apply App Settings).
