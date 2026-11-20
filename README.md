@@ -61,32 +61,39 @@ brackets, the Tektur typeface and glitches when you move fast. It is the same vi
 ### ⌖ Object memory: "where did I leave it?"
 
 - While you walk around, New Vision **remembers where each kind of object was seen** (a few spots per class).
-- **GENERAL › FIND** lists them by age and distance. Tap one: brackets mark the spot, a **chevron at the edge of your
+- **VISION › FIND** lists them by age and distance. Tap one: brackets mark the spot, a **chevron at the edge of your
   view** points the way when it's behind you, and when the detector sees it again the marker turns green,
   `FOUND` pops up and **the stick beeps**.
 
 ### ▭ Live subtitles: Russian speech as text, offline
 
-- **GENERAL › SUBS** turns on real-time Russian speech recognition **on the headset**
+- **ASSIST › SUBS** turns on real-time Russian speech recognition **on the headset**
   ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with the streaming T-One model; the audio never leaves it).
 - A black-glass strip low in your view shows the phrase being spoken (muted) and the finished ones; it is fixed to
   your view like a screen caption, trails head turns on a soft spring and fades out after a pause.
 
 ### ▤ The wrist panel: the only control surface
 
-<p align="center"><img src="docs/wrist-panel.png" alt="The three tabs of the wrist panel: 01 GENERAL, 02 STICK and 03 SYS" width="100%"></p>
+<p align="center"><img src="docs/wrist-panel.png" alt="The four tabs of the wrist panel: 01 VISION, 02 ASSIST, 03 STICK and 04 SYS" width="100%"></p>
 
 Turn the inside of your left wrist towards your face and the panel opens on your forearm like an old monitor
 switching on. Poke its tiles with your right index fingertip. It is fixed to your arm, stays smooth while you walk,
 and glitches when you flick your hand.
 
-| Tab | What's there |
-|---|---|
-| **01 GENERAL** | detection on/off, model, classes, boxes shown, Gemini by gaze or pinch, QR reader, laptop gestures, Capri, theme (6 colours), glitch FX level, FIND, SUBS |
-| **02 STICK** | headset and laptop link, laptop shortcuts, beep, the stick's screen page, brightness, volume, screen flip, reconnect, reboot, power off |
-| **03 SYS** | live numbers: FPS, detection time, layers per frame, objects in view, memory, Gemini latency, temperature, RAM, GPU, batteries, stick ping |
+Each tab does one job and is split into titled sections:
 
-The header always shows the battery of what the tab is about: the headset on GENERAL and SYS, the stick on STICK.
+| Tab | Sections |
+|---|---|
+| **01 VISION** | **DETECTION**: on/off, model, boxes shown · **OBJECTS**: classes, FIND, QR reader |
+| **02 ASSIST** | **GEMINI**: ask by gaze or pinch, answer language · **SUBTITLES** · **CAPRI**: show, sit |
+| **03 STICK** | stick and laptop link · **LAPTOP**: gestures, play/pause, mute · **STICK**: screen page, brightness, volume, flip · **SERVICE**: beep, relink, reboot, power off |
+| **04 SYS** | **PERFORMANCE**: FPS, detection time, layers per frame, temperature, RAM, battery · **SESSION**: objects in view, seen, Gemini latency · **LOOK**: theme (6 colours), glitch FX |
+
+The tiles say what they are at a glance: a small lamp in the corner is an on/off switch, `>` opens a page,
+red tiles need a second press, greyed-out tiles can't work right now (no stick, no laptop, no Capri in the build),
+and the live numbers on SYS have no frame because they are not buttons. Hold your fingertip over a tile and the
+status bar at the bottom explains it in one line. The status bar also shows the stick link lamp and the battery of
+what the tab is about: the stick on STICK, the headset everywhere else.
 
 ### ⌁ M5StickC Plus2: a second screen and a Bluetooth bridge
 
@@ -115,7 +122,7 @@ No controllers anywhere: the app runs in hands-only mode.
 |---|---|---|
 | Inside of the left wrist to your face | anywhere | opens the panel; turn it away to close |
 | Poke with the right index fingertip | panel | presses a tile (REBOOT, POWER OFF and CLEAR ask for a second press) |
-| Look at something for 2 s | anywhere | "What is this?" (can be switched to pinch-only: GENERAL › ASK) |
+| Look at something for 2 s | anywhere | "What is this?" (can be switched to pinch-only: ASSIST › ASK BY) |
 | Index pinch | anywhere | "What is this?" right away; on a card: its action (open link, connect to Wi-Fi) |
 | Middle-finger pinch | card open | closes the card |
 

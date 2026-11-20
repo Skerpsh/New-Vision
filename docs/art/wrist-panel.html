@@ -33,7 +33,25 @@
   .pill::before { content: ""; position: absolute; inset: 2px; background: var(--bg); clip-path: inherit; }
   .pill i { position: absolute; left: 12px; top: 13px; width: 14px; height: 14px; background: var(--green); }
   .pill b { position: absolute; left: 36px; top: 8px; font-size: 20px; color: var(--green); font-weight: normal; }
-  .foot { left: 20px; top: 548px; font-size: 18px; color: var(--muted); }
+  .tile.na { background: color-mix(in srgb, var(--dim) 50%, transparent); }
+  .tile.na .cap, .tile.na .val { color: var(--dim); }
+  .tile .lamp { position: absolute; right: 14px; top: 14px; width: 12px; height: 12px; background: var(--dim); }
+  .tile .lamp.lit { background: var(--accent); }
+  .tile .chev { position: absolute; right: 12px; top: 6px; font-size: 24px; color: var(--muted); }
+  .tile.small { display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text); }
+  .tile.small span { position: relative; }
+  .tile.small.danger span { color: var(--red); }
+  .stat { border-left: 3px solid var(--dim); padding-left: 11px; }
+  .stat .cap { font-size: 15px; color: var(--muted); margin-top: 2px; }
+  .stat .val { font-size: 28px; color: var(--text); margin-top: 4px; }
+  .stat.warn { border-color: var(--yellow); } .stat.warn .val { color: var(--yellow); }
+  .sec { left: 16px; width: 568px; height: 28px; border-bottom: 2px solid var(--dim); }
+  .sec i { position: absolute; left: 0; top: 7px; width: 6px; height: 13px; background: var(--accent); }
+  .sec b { position: absolute; left: 14px; top: 3px; font-size: 17px; font-weight: normal; color: var(--text); }
+  .sec em { position: absolute; right: 0; top: 5px; font-size: 15px; font-style: normal; color: var(--muted); }
+  .sline { left: 0; top: 542px; width: 600px; height: 2px; background: var(--dim); }
+  .foot { left: 20px; top: 557px; font-size: 17px; color: var(--muted); }
+  .foot.hint { color: var(--accent); }
   .cursor { width: 18px; height: 18px; background: var(--accent); box-shadow: 0 0 18px var(--accent); }
   .finger { width: 60px; height: 150px; border: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
     border-radius: 30px 30px 18px 18px; background: color-mix(in srgb, var(--accent) 6%, transparent); }
@@ -42,70 +60,93 @@
 </style>
 </head>
 <body class="scan">
-<div class="label" style="left:40px"><b>01 GENERAL</b> // NEW VISION</div>
-<div class="label" style="left:560px"><b>02 STICK</b> // M5STICKC PLUS2</div>
-<div class="label" style="left:1080px"><b>03 SYS</b> // LIVE NUMBERS</div>
+<div class="label" style="left:40px"><b>01 VISION</b> // WHAT YOU SEE</div>
+<div class="label" style="left:560px"><b>03 STICK</b> // M5STICKC PLUS2</div>
+<div class="label" style="left:1080px"><b>04 SYS</b> // LIVE NUMBERS + LOOK</div>
 <script>
-const W = 600, M = 16, GAP = 12, TOP = 74, TW = (W - M * 2 - GAP * 2) / 3;
+const W = 600, M = 16, GAP = 12, TOP = 74, TABS = ["01 VISION", "02 ASSIST", "03 STICK", "04 SYS"];
+const TABW = (W - M * 2 - 8 * 3) / 4;
 function el(parent, cls, css, html) {
   const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {});
   if (html !== undefined) d.innerHTML = html; parent.appendChild(d); return d;
 }
-function panel(x, active, battery) {
+function panel(x, active, battery, who, link) {
   const p = el(document.body, "panel chamfer", { left: x + "px" });
   el(p, "bg chamfer");
-  const tabs = [["01 GENERAL", 16, 156], ["02 STICK", 182, 124], ["03 SYS", 316, 104]];
-  tabs.forEach(([t, tx, tw], i) => el(p, "abs tab chamfer " + (i === active ? "on" : "off"), { left: tx + "px", width: tw + "px" }, "<span>" + t + "</span>"));
-  el(p, "abs", { left: "432px", top: "28px", width: "12px", height: "12px", background: "var(--green)" });
-  const lit = Math.round(battery / 20);
-  for (let i = 0; i < 5; i++) el(p, "abs seg", { left: (534 + i * 10) + "px", background: i < lit ? "var(--accent)" : "var(--dim)" });
-  el(p, "abs", { left: "466px", top: "22px", width: "64px", textAlign: "right", fontSize: "18px" }, "+" + battery + "%");
+  TABS.forEach((t, i) => el(p, "abs tab chamfer " + (i === active ? "on" : "off"), { left: (M + i * (TABW + 8)) + "px", width: TABW + "px" }, "<span>" + t + "</span>"));
   el(p, "abs line");
-  el(p, "abs mark", { left: tabs[active][1] + "px" });
+  el(p, "abs mark", { left: (M + active * (TABW + 8)) + "px", width: TABW + "px" });
+  // status bar: line, footer, link lamp, battery
+  el(p, "abs sline");
+  el(p, "abs", { left: "384px", top: "562px", width: "12px", height: "12px", background: link });
+  el(p, "abs", { left: "400px", top: "548px", width: "128px", height: "40px", lineHeight: "40px", textAlign: "right", fontSize: "17px" }, who + " +" + battery + "%");
+  const lit = Math.round(battery / 20);
+  for (let i = 0; i < 5; i++) el(p, "abs seg", { left: (534 + i * 10) + "px", top: "558px", background: i < lit ? "var(--accent)" : "var(--dim)" });
+  p.y = TOP;
   return p;
 }
-function tile(p, col, row, top, h, cap, val, opt) {
-  opt = opt || {};
-  const t = el(p, "abs tile chamfer" + (opt.fill ? " fill" : "") + (opt.hover ? " hover" : "") + (opt.danger ? " danger" : ""),
-    { left: (M + col * (TW + GAP)) + "px", top: (top + row * (h + GAP)) + "px", width: TW + "px", height: h + "px" });
-  el(t, "cap", null, cap);
-  el(t, "val" + (opt.off ? " off" : "") + (opt.danger ? " red" : ""), null, val);
-  return t;
+function section(p, title, summary) {
+  el(p, "abs sec", { top: p.y + "px" }, "<i></i><b>" + title + "</b>" + (summary ? "<em>" + summary + "</em>" : ""));
+  p.y += 34;
+}
+// row of tiles: [cap, val, {fill, hover, danger, off, na, lamp: true|false, opens, small, stat, warn}]
+function row(p, h, cols, items) {
+  const w = (W - M * 2 - GAP * (cols - 1)) / cols;
+  items.forEach(([cap, val, o], i) => {
+    o = o || {};
+    const css = { left: (M + i * (w + GAP)) + "px", top: p.y + "px", width: w + "px", height: h + "px" };
+    if (o.stat) {
+      el(p, "abs stat" + (o.warn ? " warn" : ""), css, '<div class="cap">' + cap + '</div><div class="val">' + val + "</div>");
+      return;
+    }
+    const cls = "abs tile chamfer" + (o.small ? " small" : "") + (o.fill ? " fill" : "") + (o.hover ? " hover" : "") + (o.danger ? " danger" : "") + (o.na ? " na" : "");
+    const t = el(p, cls, css);
+    if (o.small) { t.insertAdjacentHTML("beforeend", "<span>" + val + "</span>"); return; }
+    el(t, "cap", null, cap);
+    el(t, "val" + (o.off ? " off" : ""), null, val);
+    if (o.lamp !== undefined) el(t, "lamp" + (o.lamp && !o.fill ? " lit" : ""), o.fill ? { background: "#000" } : null);
+    if (o.opens) el(t, "chev", null, "&gt;");
+  });
+  p.y += h + GAP;
 }
 
-// 01 GENERAL
-let p = panel(40, 0, 87);
-[["DETECT", "ON"], ["MODEL", "11N 416"], ["CLASSES", "80/80"],
- ["BOXES", "3"], ["ASK", "GAZE"], ["QR", "ON"],
- ["LAPTOP", "ON"], ["CAPRI", "OFF", { off: true }], ["CAPRI", "SIT"],
- ["THEME", "ORANGE"], ["FX", "HIGH", { hover: true }], ["FIND", "12"]]
-  .forEach(([c, v, o], i) => tile(p, i % 3, Math.floor(i / 3), TOP, 100, c, v, o));
-el(p, "abs foot", null, "DETECTION ONLINE");
-el(p, "abs cursor", { left: "300px", top: "432px" });
+// 01 VISION: the finger hovers FIND, the status bar explains it
+let p = panel(40, 0, 87, "HMD", "var(--green)");
+section(p, "DETECTION", "YOLO 96MS");
+row(p, 120, 3, [["DETECT", "ON", { lamp: true }], ["MODEL", "11N 416"], ["BOXES", "3"]]);
+section(p, "OBJECTS", "IN VIEW 4  //  SEEN 12");
+row(p, 120, 3, [["CLASSES", "80/81", { opens: true }], ["FIND", "12", { opens: true, hover: true }], ["QR", "OFF", { lamp: false, off: true }]]);
+el(p, "abs foot hint", null, "LEAD ME BACK TO SOMETHING I SAW");
+el(p, "abs cursor", { left: "290px", top: "330px" });
 
-// 02 STICK
-p = panel(560, 1, 71);
+// 03 STICK: laptop not paired, its keys greyed out
+p = panel(560, 2, 71, "STICK", "var(--yellow)");
 const pw = (W - M * 2 - GAP) / 2;
-[["QUEST LINK", M], ["LAPTOP", M + pw + GAP]].forEach(([t, x]) => { const q = el(p, "abs pill chamfer", { left: x + "px", width: pw + "px" }); el(q, "", null, "<i></i><b>" + t + "</b>"); });
-el(p, "abs", { left: "20px", top: "130px", fontSize: "18px", color: "var(--muted)" }, "PING 38MS  //  UP 12M  //  HEAP 186K");
-[["PLAY", "PAUSE", { fill: true }], ["MUTE", "SOUND"], ["BEEP", "TEST"],
- ["SCREEN", "HOME"], ["BRIGHT", "MED"], ["VOLUME", "LOW"],
- ["LINK", "RESET"], ["REBOOT", "RUN", { danger: true }], ["POWER", "OFF", { danger: true }],
- ["FLIP", "0°", { off: true }]]
-  .forEach(([c, v, o], i) => tile(p, i % 3, Math.floor(i / 3), TOP + 92, 74, c, v, o));
-el(p, "abs foot", null, "EXPLORER -&gt; LAPTOP");
+[["STICK LINKED", M, "var(--green)"], ["NO LAPTOP", M + pw + GAP, "var(--yellow)"]].forEach(([t, x, c]) => {
+  const q = el(p, "abs pill chamfer", { left: x + "px", width: pw + "px", background: c });
+  el(q, "", null, '<i style="background:' + c + '"></i><b style="color:' + c + '">' + t + "</b>");
+});
+p.y = TOP + 52;
+section(p, "LAPTOP  //  VIA STICK", "NOT PAIRED");
+row(p, 80, 3, [["GESTURES", "ON", { lamp: true }], ["PLAY", "PAUSE", { na: true }], ["MUTE", "SOUND", { na: true }]]);
+section(p, "STICK", "PING 38MS  //  UP 12M  //  HEAP 186K");
+row(p, 80, 4, [["SCREEN", "HOME", { fill: true }], ["BRIGHT", "MED"], ["VOLUME", "LOW"], ["FLIP", "0°"]]);
+section(p, "SERVICE");
+row(p, 52, 4, [["", "BEEP", { small: true }], ["", "RELINK", { small: true }], ["", "REBOOT", { small: true, danger: true }], ["", "POWER", { small: true, danger: true }]]);
+el(p, "abs foot", null, "SCREEN HOME  //  THEME ORANGE");
 // the panel shaken: torn fragments over it
 [["c", 30, 250, 160], ["m", 260, 330, 220], ["a", 120, 420, 120], ["w", 380, 210, 90]].forEach(([k, x, y, w]) =>
   el(p, "frag " + k, { left: x + "px", top: y + "px", width: w + "px" }));
-el(p, "abs", { left: "402px", top: "62px", width: "2px", height: "480px", background: "var(--cyan)", opacity: ".5" });
 
-// 03 SYS
-p = panel(1080, 2, 87);
-[["FPS", "72"], ["YOLO", "96MS"], ["LAYERS", "62/F"],
- ["OBJECTS", "4"], ["MEMORY", "12"], ["ASK", "3.1S"],
- ["TEMP", "34°C"], ["RAM", "812MB"], ["GPU", "58%"],
- ["BATTERY", "87%"], ["STICK", "38MS"], ["LAPTOP", "LINK"]]
-  .forEach(([c, v], i) => tile(p, i % 3, Math.floor(i / 3), TOP, 100, c, v));
+// 04 SYS: read-only numbers without frames, then the look
+p = panel(1080, 3, 87, "HMD", "var(--green)");
+section(p, "PERFORMANCE", "UP 41M");
+row(p, 64, 3, [["FPS", "72", { stat: true }], ["YOLO", "96MS", { stat: true }], ["LAYERS", "62/F", { stat: true }]]);
+row(p, 64, 3, [["TEMP", "43°C", { stat: true, warn: true }], ["RAM", "812MB", { stat: true }], ["BATTERY", "87%", { stat: true }]]);
+section(p, "SESSION");
+row(p, 64, 3, [["IN VIEW", "4", { stat: true }], ["SEEN", "12", { stat: true }], ["GEMINI", "3.1S", { stat: true }]]);
+section(p, "LOOK");
+row(p, 80, 3, [["THEME", "ORANGE"], ["FX", "HIGH"]]);
 el(p, "abs foot", null, "UP 41M  //  MODEL 11N 416  //  8GB");
 </script>
 </body>
