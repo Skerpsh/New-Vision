@@ -88,7 +88,7 @@ p = panel(560, 1, 71);
 const pw = (W - M * 2 - GAP) / 2;
 [["QUEST LINK", M], ["LAPTOP", M + pw + GAP]].forEach(([t, x]) => { const q = el(p, "abs pill chamfer", { left: x + "px", width: pw + "px" }); el(q, "", null, "<i></i><b>" + t + "</b>"); });
 el(p, "abs", { left: "20px", top: "130px", fontSize: "18px", color: "var(--muted)" }, "PING 38MS  //  UP 12M  //  HEAP 186K");
-[["EXPLORER", "WIN+E", { fill: true }], ["CLOSE", "ALT+F4"], ["BEEP", "TEST"],
+[["PLAY", "PAUSE", { fill: true }], ["MUTE", "SOUND"], ["BEEP", "TEST"],
  ["SCREEN", "HOME"], ["BRIGHT", "MED"], ["VOLUME", "LOW"],
  ["LINK", "RESET"], ["REBOOT", "RUN", { danger: true }], ["POWER", "OFF", { danger: true }],
  ["FLIP", "0°", { off: true }]]
