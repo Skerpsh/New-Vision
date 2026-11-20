@@ -8,17 +8,55 @@ using UnityEngine.UI;
 namespace PassthroughCameraSamples.MultiObjectDetection
 {
     /// <summary>
-    /// Look at the laptop (the detector sees "laptop") and use microgestures of either hand:
-    /// thumb tap on the side of the index finger = open Explorer (Win+E), thumb swipe left = close the window (Alt+F4).
-    /// The commands go over Bluetooth to the stick, which types them on the laptop as its Bluetooth keyboard.
+    /// Controls the laptop's system with microgestures (the thumb on the side of the index finger) while you look at the
+    /// laptop (the detector sees "laptop"). Looking at it arms the gestures, so a stray thumb movement elsewhere does nothing.
+    /// Right hand = sound and media: tap = play/pause, swipe forward/back = volume up/down, swipe left/right = previous/next track.
+    /// Left hand = windows: tap = Alt+Tab, swipe forward = Task View (Win+Tab), swipe back = desktop (Win+D),
+    /// swipe left/right = snap the window to that half of the screen (Win+Left/Right). While the wrist panel is open the
+    /// left hand belongs to it. The commands go over Bluetooth to the stick, which presses the keys as the laptop's
+    /// Bluetooth keyboard (media and volume as consumer-control keys).
     /// </summary>
     public class LaptopGestures : MonoBehaviour
     {
         private const string EnabledKey = "NewVision.LaptopGestures";
         /// <summary>Boxes flicker; the laptop still counts as looked at this long after the ray left its box.</summary>
         private const float GazeGrace = 0.8f;
-        private const float Cooldown = 0.6f;
+        /// <summary>Short: a few volume swipes in a row should all count.</summary>
+        private const float Cooldown = 0.35f;
         private static readonly string[] TargetClasses = { "laptop" };
+
+        private readonly struct GestureAction
+        {
+            public readonly string Command;
+            public readonly string Label;
+
+            public GestureAction(string command, string label)
+            {
+                Command = command;
+                Label = label;
+            }
+        }
+
+        // Indexed by OVRHand.MicrogestureType: NoGesture, SwipeLeft, SwipeRight, SwipeForward, SwipeBackward, ThumbTap
+        private static readonly GestureAction[] s_right =
+        {
+            default,
+            new("prev", "PREV TRACK"),
+            new("next", "NEXT TRACK"),
+            new("volup", "VOL +"),
+            new("voldown", "VOL -"),
+            new("play", "PLAY / PAUSE"),
+        };
+
+        private static readonly GestureAction[] s_left =
+        {
+            default,
+            new("snapleft", "SNAP LEFT"),
+            new("snapright", "SNAP RIGHT"),
+            new("tasks", "TASK VIEW"),
+            new("desktop", "DESKTOP"),
+            new("switch", "ALT+TAB"),
+        };
 
         /// <summary>True while the user is looking at the laptop: "What is this?" must not start by dwelling on it.</summary>
         public static bool LookingAtLaptop { get; private set; }
@@ -31,6 +69,8 @@ namespace PassthroughCameraSamples.MultiObjectDetection
         private float m_lastGazeTime = -100f;
         private Vector3 m_anchor;
         private float m_nextCommand;
+        private string m_pendingCommand;
+        private string m_pendingLabel;
         private RectTransform m_hint;
         private Image m_background;
         private Text m_hintText;
@@ -76,49 +116,51 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
             if (LookingAtLaptop && Time.time >= m_nextCommand)
             {
-                // The left hand belongs to the wrist panel while it is open
-                var right = m_hands.Get(HandTracker.Right).Gesture;
-                var left = WristPanel.IsVisible ? OVRHand.MicrogestureType.NoGesture : m_hands.Get(HandTracker.Left).Gesture;
-                var gesture = right != OVRHand.MicrogestureType.NoGesture ? right : left;
-                switch (gesture)
+                // The right hand first; the left one only while the wrist panel is closed
+                if (!TryRun(s_right, m_hands.Get(HandTracker.Right).Gesture) && !WristPanel.IsVisible)
                 {
-                    case OVRHand.MicrogestureType.ThumbTap:
-                        Run("explorer", "EXPLORER");
-                        break;
-                    case OVRHand.MicrogestureType.SwipeLeft:
-                        Run("close", "CLOSE");
-                        break;
+                    _ = TryRun(s_left, m_hands.Get(HandTracker.Left).Gesture);
                 }
             }
 
             UpdateHint();
         }
 
-        private void Run(string command, string label)
+        private bool TryRun(GestureAction[] actions, OVRHand.MicrogestureType gesture)
         {
+            var index = (int)gesture;
+            if (index <= 0 || index >= actions.Length)
+            {
+                return false;
+            }
+            var action = actions[index];
             m_nextCommand = Time.time + Cooldown;
             if (!m_stick.Connected)
             {
                 Flash("NO STICK");
-                return;
+                return true;
             }
-            _ = m_stick.Send("CMD " + command);
-            Flash(label + " ...");
+            _ = m_stick.Send("CMD " + action.Command);
+            m_pendingCommand = action.Command;
+            m_pendingLabel = action.Label;
+            Flash(action.Label + " ...");
+            return true;
         }
 
         private void OnReply(string reply)
         {
-            if (reply.StartsWith("OK explorer"))
+            if (m_pendingCommand != null && reply == "OK " + m_pendingCommand)
             {
-                Flash("EXPLORER // OK");
-            }
-            else if (reply.StartsWith("OK close"))
-            {
-                Flash("CLOSED // OK");
+                Flash(m_pendingLabel + " // OK");
+                m_pendingCommand = null;
             }
             else if (reply.StartsWith("ERR notpaired"))
             {
                 Flash("NOT PAIRED");
+            }
+            else if (reply.StartsWith("ERR unknown"))
+            {
+                Flash("UPDATE STICK FIRMWARE");
             }
         }
 
@@ -165,12 +207,12 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             {
                 return;
             }
-            m_background.color = flashing && m_flash.StartsWith("NO") ? NvStyle.Yellow : NvStyle.Accent;
+            m_background.color = flashing && (m_flash.StartsWith("NO") || m_flash.StartsWith("UPDATE")) ? NvStyle.Yellow : NvStyle.Accent;
             var connected = m_stick.Connected;
             m_hintText.text = flashing ? m_flash
                 : !connected ? "LAPTOP // NO STICK"
                 : !m_stick.LaptopPaired ? "LAPTOP // NOT PAIRED"
-                : "TAP: EXPLORER  //  SWIPE L: CLOSE";
+                : "R  TAP PLAY  //  FWD-BACK VOL  //  L-R TRACK\nL  TAP ALT+TAB  //  FWD TASKS  //  BACK DESKTOP  //  L-R SNAP";
             var distance = Vector3.Distance(m_head.position, m_anchor);
             m_hint.position = m_anchor + Vector3.up * (0.04f * distance);
             m_hint.rotation = Quaternion.LookRotation(m_hint.position - m_head.position, Vector3.up);
@@ -184,6 +226,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             go.transform.SetParent(transform, false);
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            NvStyle.Crisp(canvas);
             canvas.sortingOrder = 92;
             m_hint = (RectTransform)go.transform;
             m_hint.pivot = new Vector2(0.5f, 0f);
@@ -210,6 +253,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             m_hintText.color = Color.black;
             m_hintText.alignment = TextAnchor.MiddleCenter;
             m_hintText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            m_hintText.verticalOverflow = VerticalWrapMode.Overflow;
             m_hintText.raycastTarget = false;
             go.SetActive(false);
         }

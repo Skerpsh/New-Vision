@@ -328,6 +328,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             canvasGo.transform.SetParent(transform, false);
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            NvStyle.Crisp(canvas);
             canvas.sortingOrder = 90;
             m_reticle = (RectTransform)canvasGo.transform;
             m_reticle.sizeDelta = new Vector2(ReticleUnits, ReticleUnits);
@@ -376,6 +377,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             canvasGo.transform.SetParent(transform, false);
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            NvStyle.Crisp(canvas);
             canvas.sortingOrder = 95;
             m_card = (RectTransform)canvasGo.transform;
             m_card.pivot = new Vector2(0.5f, 1f); // grows downwards, the top edge is placed in UpdateCard

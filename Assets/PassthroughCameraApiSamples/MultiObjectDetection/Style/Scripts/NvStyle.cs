@@ -252,6 +252,21 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             rect.sizeDelta = new Vector2(width, height);
         }
 
+        /// <summary>
+        /// Text on a world-space canvas is rasterised at 1 font pixel per canvas unit, which on the headset is about one
+        /// display pixel: glyphs come out soft and stair-stepped. Twice the density keeps them crisp; more would only
+        /// shimmer, since the font texture has no mipmaps.
+        /// </summary>
+        public static void Crisp(Canvas canvas, float pixelsPerUnit = 2f)
+        {
+            var scaler = canvas.GetComponent<CanvasScaler>();
+            if (scaler == null)
+            {
+                scaler = canvas.gameObject.AddComponent<CanvasScaler>();
+            }
+            scaler.dynamicPixelsPerUnit = pixelsPerUnit;
+        }
+
         public static void Stretch(RectTransform rect, float inset = 0f)
         {
             rect.anchorMin = Vector2.zero;
