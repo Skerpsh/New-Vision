@@ -44,7 +44,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
 
         public bool LaptopPaired => Connected && Field("bt") == "1";
 
-        /// <summary>Every reply except STATUS ("OK explorer", "ERR notpaired", ...).</summary>
+        /// <summary>Every reply except STATUS ("OK play", "ERR notpaired", ...).</summary>
         public event Action<string> Reply;
 
         public string Field(string key) => m_status.TryGetValue(key, out var value) ? value : null;
@@ -187,7 +187,7 @@ namespace PassthroughCameraSamples.MultiObjectDetection
             }
         }
 
-        /// <summary>Sends a protocol line to the stick ("CMD explorer", "SET vol 64", "BEEP", ...).</summary>
+        /// <summary>Sends a protocol line to the stick ("CMD play", "SET vol 64", "BEEP", ...).</summary>
         public bool Send(string line)
         {
             if (m_serial == null || m_portState != "open")

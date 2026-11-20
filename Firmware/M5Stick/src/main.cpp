@@ -17,7 +17,7 @@
 // notifications on TX (long lines split into chunks, the '\n' ends a line). USB serial accepts the same commands.
 //   "NV?"                       -> "NVSTICK bt=0|1"            handshake (bt = laptop keyboard connected)
 //   "STATUS"                    -> "STATUS bt=1 bat=87 chg=1 vol=90 bri=100 scr=home th=0 fx=2 up=123 heap=12345"
-//   "CMD <name>"                -> "OK <name>" | "ERR notpaired" | "ERR unknown"   keys sent to the laptop
+//   "CMD <name>"                -> "OK <name>" | "ERR notpaired" | "ERR unknown"   keys sent to the laptop (list below)
 //   "SET vol <0..255>"          -> "OK vol"                    buzzer volume
 //   "SET bri <0..255>"          -> "OK bri"                    screen brightness
 //   "SET scr home|debug|off"    -> "OK scr"                    what the screen shows
@@ -28,7 +28,12 @@
 //   "LOG <text>"                -> "OK log"                    an event from the headset for the log (e.g. FOUND LAPTOP)
 //   "BEEP"                      -> "OK beep"
 //   "REBOOT" / "OFF"            -> "OK reboot" / "OK off"
-// Laptop commands: explorer (Win+E), close (Alt+F4). Settings survive a reboot.
+// Laptop commands (system control, sent by the headset's hand gestures):
+//   play (Play/Pause), next / prev (track), volup / voldown (3 volume steps), mute     -- consumer-control keys
+//   switch (Alt+Tab), tasks (Win+Tab), desktop (Win+D), snapleft / snapright (Win+Left/Right)  -- keyboard
+// Settings survive a reboot.
+// After changing the HID report map (nv-stick 6 added the media keys) remove "New Vision Stick" from the laptop's
+// Bluetooth devices and pair again: Windows keeps the old report map of a bonded device.
 
 #include <M5Unified.h>
 #include <NimBLEDevice.h>
@@ -37,36 +42,59 @@
 #include <deque>
 #include <time.h>
 
-static const char* FW_VERSION = "nv-stick 5";
+static const char* FW_VERSION = "nv-stick 6";
 static const char* DEVICE_NAME = "New Vision Stick";
 // Nordic UART Service UUIDs: the Quest finds the stick by name and talks through these
 static const char* UART_SERVICE = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 static const char* UART_RX = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";   // Quest -> stick (write)
 static const char* UART_TX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";   // stick -> Quest (notify)
 
-// HID keyboard: modifiers + 6 keys, report id 1
+// HID: keyboard (modifiers + 6 keys, report id 1) and consumer control (one 16-bit usage, report id 2: media, volume)
 static const uint8_t REPORT_MAP[] = {
     0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x01,
     0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,  // modifiers
     0x95, 0x01, 0x75, 0x08, 0x81, 0x01,                                                              // reserved
     0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00,  // keys
+    0xC0,
+    0x05, 0x0C, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x02,                                                  // consumer control
+    0x15, 0x00, 0x26, 0xFF, 0x03, 0x19, 0x00, 0x2A, 0xFF, 0x03, 0x75, 0x10, 0x95, 0x01, 0x81, 0x00,  // one usage 0..0x3FF
     0xC0
 };
 static const uint8_t MOD_LEFT_ALT = 0x04;
 static const uint8_t MOD_LEFT_GUI = 0x08;
-static const uint8_t KEY_E = 0x08;
-static const uint8_t KEY_F4 = 0x3D;
+static const uint8_t KEY_D = 0x07;
+static const uint8_t KEY_TAB = 0x2B;
+static const uint8_t KEY_RIGHT = 0x4F;
+static const uint8_t KEY_LEFT = 0x50;
+// Consumer page usages
+static const uint16_t CC_NEXT = 0xB5;
+static const uint16_t CC_PREV = 0xB6;
+static const uint16_t CC_PLAY_PAUSE = 0xCD;
+static const uint16_t CC_MUTE = 0xE2;
+static const uint16_t CC_VOL_UP = 0xE9;
+static const uint16_t CC_VOL_DOWN = 0xEA;
 
 struct Command {
     const char* name;
     const char* label;
     uint8_t modifier;
-    uint8_t key;
+    uint8_t key;        // keyboard key, or 0
+    uint16_t media;     // consumer-control usage, or 0
+    uint8_t repeat;     // presses in a row
 };
 
 static const Command COMMANDS[] = {
-    {"explorer", "EXPLORER", MOD_LEFT_GUI, KEY_E},    // Win+E
-    {"close",    "CLOSE",    MOD_LEFT_ALT, KEY_F4},   // Alt+F4
+    {"play",      "PLAY/PAUSE", 0, 0, CC_PLAY_PAUSE, 1},
+    {"next",      "NEXT",       0, 0, CC_NEXT, 1},
+    {"prev",      "PREV",       0, 0, CC_PREV, 1},
+    {"volup",     "VOL +",      0, 0, CC_VOL_UP, 3},     // Windows moves 2% per press
+    {"voldown",   "VOL -",      0, 0, CC_VOL_DOWN, 3},
+    {"mute",      "MUTE",       0, 0, CC_MUTE, 1},
+    {"switch",    "ALT+TAB",    MOD_LEFT_ALT, KEY_TAB, 0, 1},
+    {"tasks",     "TASKS",      MOD_LEFT_GUI, KEY_TAB, 0, 1},
+    {"desktop",   "DESKTOP",    MOD_LEFT_GUI, KEY_D, 0, 1},
+    {"snapleft",  "SNAP L",     MOD_LEFT_GUI, KEY_LEFT, 0, 1},
+    {"snapright", "SNAP R",     MOD_LEFT_GUI, KEY_RIGHT, 0, 1},
 };
 
 // ======================================================================== BLE
@@ -74,6 +102,7 @@ static const Command COMMANDS[] = {
 static NimBLEServer* server;
 static NimBLEHIDDevice* hid;
 static NimBLECharacteristic* keyboardInput;
+static NimBLECharacteristic* mediaInput;
 static NimBLECharacteristic* uartTx;
 static volatile uint16_t questConn = BLE_HS_CONN_HANDLE_NONE;
 static volatile int connections = 0;
@@ -723,6 +752,23 @@ static void sendKeys(uint8_t modifier, uint8_t key) {
     keyboardInput->notify();
 }
 
+static void sendMedia(uint16_t usage) {
+    uint8_t report[2] = {(uint8_t)(usage & 0xFF), (uint8_t)(usage >> 8)};
+    mediaInput->setValue(report, sizeof(report));
+    mediaInput->notify();
+    delay(40);
+    uint8_t release[2] = {0, 0};
+    mediaInput->setValue(release, sizeof(release));
+    mediaInput->notify();
+}
+
+static void runCommand(const Command& c) {
+    for (int i = 0; i < c.repeat; i++) {
+        if (i) delay(30);
+        if (c.media) sendMedia(c.media); else sendKeys(c.modifier, c.key);
+    }
+}
+
 static const Command* findCommand(const String& name) {
     for (const auto& c : COMMANDS)
         if (name == c.name) return &c;
@@ -770,7 +816,7 @@ static void handleLine(String msg, Channel from) {
             reply("ERR notpaired");
             logLine("cmd " + name + ": no laptop");
         } else if (c) {
-            sendKeys(c->modifier, c->key);
+            runCommand(*c);
             reply("OK " + name);
             logLine("cmd " + name + " -> laptop");
             lastEvent = c->label;
@@ -906,6 +952,7 @@ static void setupBle() {
     // Keyboard for the laptop
     hid = new NimBLEHIDDevice(server);
     keyboardInput = hid->inputReport(1);
+    mediaInput = hid->inputReport(2);
     hid->manufacturer()->setValue("New Vision");
     hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
     hid->hidInfo(0x00, 0x01);

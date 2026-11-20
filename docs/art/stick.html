@@ -75,7 +75,7 @@ s(home, "s", { left: "196px", top: "18px", width: "1px", height: "88px", backgro
 const debug = document.getElementById("debug");
 header(debug, "02", "DEBUG");
 ["18:14:02 nv-stick 5 boot", "18:14:02 ble advertising", "18:14:05 laptop connected", "18:14:09 quest connected",
- "18:14:09 quest talking", "18:14:09 time synced", "18:16:40 cmd explorer -> laptop", "18:20:31 FOUND LAPTOP"]
+ "18:14:09 quest talking", "18:14:09 time synced", "18:16:40 cmd play -> laptop", "18:20:31 FOUND LAPTOP"]
   .forEach((line, i) => s(debug, "s t11", { left: "4px", top: (20 + i * 11) + "px", color: "var(--text)" }, line));
 s(debug, "s", { left: "0", top: "117px", width: "240px", height: "1px", background: "var(--dim)" });
 s(debug, "s t11", { left: "4px", top: "121px", color: "var(--muted)" }, "nv-stick 5  //  CONN 2  //  MSG 1406  //  HEAP 186K");
